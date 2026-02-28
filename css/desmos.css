@@ -182,7 +182,7 @@
     height: 12px;
     border-radius: 50%;
     flex-shrink: 0;
-    border: 1px solid rgba(255,255,255,0.2);
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .desmos-row__input-wrap {
@@ -229,7 +229,7 @@
 }
 
 .desmos-row__btn:hover {
-    background: rgba(255,255,255,0.1);
+    background: rgba(255, 255, 255, 0.1);
     color: var(--fg, #e8e8e8);
 }
 
@@ -242,7 +242,7 @@
     min-height: 28px;
     font-size: 0.9rem;
     color: var(--desmos-preview-fg, #a0b8d4);
-    border-top: 1px solid rgba(255,255,255,0.06);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .desmos-row__preview .katex {
@@ -267,7 +267,7 @@
 
 .desmos-row__sliders {
     padding: 6px 8px 8px 26px;
-    border-top: 1px solid rgba(255,255,255,0.06);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
     display: flex;
     flex-wrap: wrap;
     gap: 10px 16px;

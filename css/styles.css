@@ -56,17 +56,49 @@ h1 {
     outline-offset: 2px;
 }
 
+/* Expression entry */
+.expression-entry {
+    margin-bottom: 1rem;
+}
+
+.expression-entry__row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.expression-entry__row .desmos-row__input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    font-size: 1rem;
+    background: #252525;
+    color: var(--fg);
+    border: 1px solid #444;
+    border-radius: 0.25rem;
+}
+
+.expression-entry__row .desmos-row__input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.25);
+}
+
+.expression-entry__row .desmos-row__input::placeholder {
+    color: var(--muted);
+}
+
 /* Graph Mode */
 #function-catalog {
-    display: block;
-    margin: 0.5rem 0 1rem;
+    display: inline-block;
+    margin: 0;
     padding: 0.5rem;
-    font-size: 1rem;
+    font-size: 0.9rem;
     background: var(--bg);
     color: var(--fg);
     border: 1px solid var(--muted);
     border-radius: 0.25rem;
-    min-width: 12rem;
+    min-width: 8rem;
+    flex-shrink: 0;
 }
 
 #graph {

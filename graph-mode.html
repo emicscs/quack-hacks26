@@ -1,26 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Graph Mode – Audible Math</title>
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/desmos.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.0.0/math.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
 </head>
+
 <body>
     <main role="main" aria-label="Graph mode – explore function with sound">
         <h1>Graph Mode</h1>
 
-        <section aria-label="Function selection">
-            <label for="function-catalog">Popular Graphs</label>
-            <select id="function-catalog" aria-describedby="catalog-desc">
-                <option value="sin(x)">f(x) = sin(x)</option>
-                <option value="x^2">f(x) = x²</option>
-                <option value="1/x">f(x) = 1/x</option>
-                <option value="x">f(x) = x</option>
-                <option value="sqrt(x)">f(x) = √x</option>
-            </select>
+        <section aria-label="Expression entry" class="expression-entry">
+            <div class="expression-entry__row">
+                <input type="text" id="expr-input" class="desmos-row__input" placeholder="y = 2x^2 + 3, y = a sin(x), y = e^x" autocomplete="off" spellcheck="false" aria-label="Function expression" />
+                <select id="function-catalog" aria-describedby="catalog-desc" title="Quick examples">
+                    <option value="">Examples...</option>
+                    <option value="sin(x)">sin(x)</option>
+                    <option value="x^2">x²</option>
+                    <option value="1/x">1/x</option>
+                    <option value="sqrt(x)">√x</option>
+                    <option value="e^x">eˣ</option>
+                </select>
+            </div>
+            <div id="expr-preview" class="desmos-row__preview desmos-row__preview--empty"></div>
+            <div id="expr-error" class="desmos-row__error" style="display:none" role="alert"></div>
+            <div id="expr-sliders" class="desmos-row__sliders"></div>
             <span id="catalog-desc" class="visually-hidden">Choose a function to graph and sonify.</span>
         </section>
 
@@ -40,8 +51,11 @@
             </label>
         </section>
 
-        <p class="instructions">Use <kbd>←</kbd>/<kbd>→</kbd> to move by step size. Tap once for one immediate step, hold to repeat using the step interval. Use <kbd>↑</kbd>/<kbd>↓</kbd> to change the step interval by 0.1 seconds.</p>
-        <div id="keyboard-focus-region" tabindex="0" class="visually-hidden" aria-label="Graph exploration area. Use arrow keys to move."></div>
+        <p class="instructions">Use <kbd>←</kbd>/<kbd>→</kbd> to move by step size. Tap once for one immediate step,
+            hold to repeat using the step interval. Use <kbd>↑</kbd>/<kbd>↓</kbd> to change the step interval by 0.1
+            seconds.</p>
+        <div id="keyboard-focus-region" tabindex="0" class="visually-hidden"
+            aria-label="Graph exploration area. Use arrow keys to move."></div>
     </main>
 
     <script src="js/math-engine.js"></script>
@@ -51,25 +65,102 @@
     <script src="criticalPointDetector.js"></script>
     <script>
         (function initGraphMode() {
-            const catalog = document.getElementById("function-catalog");
-            const focusRegion = document.getElementById("keyboard-focus-region");
-            const stepInput = document.getElementById("step-size-input");
-            const bufferEl = document.getElementById("buffer-seconds");
-            const stopCriticalToggle = document.getElementById("stop-critical-toggle");
-            const graphState = window.AudibleMath.graphState;
-            const sonification = window.AudibleMath.sonification;
-            const voiceIntro = window.AudibleMath.voiceIntro;
+            var catalog = document.getElementById("function-catalog");
+            var exprInput = document.getElementById("expr-input");
+            var exprPreview = document.getElementById("expr-preview");
+            var exprError = document.getElementById("expr-error");
+            var exprSliders = document.getElementById("expr-sliders");
+            var focusRegion = document.getElementById("keyboard-focus-region");
+            var stepInput = document.getElementById("step-size-input");
+            var bufferEl = document.getElementById("buffer-seconds");
+            var stopCriticalToggle = document.getElementById("stop-critical-toggle");
+            var graphState = window.AudibleMath.graphState;
+            var mathEngine = window.AudibleMath.mathEngine;
+            var sonification = window.AudibleMath.sonification;
+            var voiceIntro = window.AudibleMath.voiceIntro;
 
-            const criticalPoints = window.CriticalPointDetector && CriticalPointDetector.integrate({
+            var currentParams = {};
+            var debounceTimer = null;
+
+            var criticalPoints = window.CriticalPointDetector && CriticalPointDetector.integrate({
                 graphSelector: "#graph",
                 getCursorX: function () { return graphState.currentX; },
                 onCursorChange: function (x, y, isValid) { sonification.setFrequencyFromY(y, isValid); }
             });
             if (criticalPoints) window.criticalPoints = criticalPoints;
 
-            function onFunctionChange() {
-                const expr = catalog.value;
-                graphState.setFunction(expr);
+            function renderLatex(text) {
+                if (!exprPreview) return;
+                var latex = mathEngine.toTex(text);
+                if (typeof katex !== "undefined" && latex) {
+                    try {
+                        exprPreview.innerHTML = katex.renderToString(latex, { throwOnError: false, displayMode: false });
+                        exprPreview.classList.remove("desmos-row__preview--empty", "desmos-row__preview--error");
+                    } catch (e) {
+                        exprPreview.textContent = latex;
+                    }
+                } else {
+                    exprPreview.textContent = latex || "";
+                    exprPreview.classList.toggle("desmos-row__preview--empty", !latex);
+                }
+            }
+
+            function showError(msg) {
+                if (!exprError) return;
+                exprError.textContent = msg || "";
+                exprError.style.display = msg ? "block" : "none";
+            }
+
+            function buildSliders(paramNames) {
+                if (!exprSliders) return;
+                exprSliders.innerHTML = "";
+                if (!paramNames || !paramNames.length) return;
+                paramNames.forEach(function (name) {
+                    var wrap = document.createElement("div");
+                    wrap.className = "desmos-row__slider-wrap";
+                    var label = document.createElement("label");
+                    label.textContent = name + ":";
+                    var slider = document.createElement("input");
+                    slider.type = "range";
+                    slider.className = "desmos-row__slider";
+                    slider.min = -10; slider.max = 10; slider.step = 0.1;
+                    slider.value = currentParams[name] != null ? currentParams[name] : 1;
+                    var valueSpan = document.createElement("span");
+                    valueSpan.className = "desmos-row__slider-value";
+                    valueSpan.textContent = slider.value;
+                    slider.addEventListener("input", function () {
+                        var v = parseFloat(this.value);
+                        valueSpan.textContent = Number.isInteger(v) ? v : v.toFixed(2);
+                        currentParams[name] = v;
+                        applyExpression(exprInput.value);
+                    });
+                    if (currentParams[name] == null) currentParams[name] = 1;
+                    wrap.appendChild(label);
+                    wrap.appendChild(slider);
+                    wrap.appendChild(valueSpan);
+                    exprSliders.appendChild(wrap);
+                });
+            }
+
+            function applyExpression(raw) {
+                var text = (raw || "").trim();
+                if (!text) { showError(""); return; }
+                var validation = mathEngine.validate(text);
+                if (!validation.valid) {
+                    showError(validation.error);
+                    return;
+                }
+                showError("");
+                var normalized = mathEngine.normalizeExpressionInput(text);
+                var paramNames = mathEngine.getParameterNames(text);
+                var newParams = {};
+                paramNames.forEach(function (n) {
+                    newParams[n] = currentParams[n] != null ? currentParams[n] : 1;
+                });
+                var paramsChanged = paramNames.join() !== Object.keys(currentParams).sort().join();
+                currentParams = newParams;
+                if (paramsChanged) buildSliders(paramNames);
+                graphState.setFunction(normalized);
                 graphState.drawGraph();
                 graphState.updateCursorDisplay();
                 if (criticalPoints) criticalPoints.run();
@@ -78,22 +169,42 @@
                 }
             }
 
-            catalog.addEventListener("change", onFunctionChange);
+            function scheduleApply() {
+                if (debounceTimer) clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(function () {
+                    debounceTimer = null;
+                    applyExpression(exprInput.value);
+                }, 120);
+            }
+
+            exprInput.addEventListener("input", function () {
+                renderLatex(this.value);
+                showError("");
+                scheduleApply();
+            });
+            exprInput.addEventListener("blur", function () {
+                applyExpression(this.value);
+            });
+            exprInput.addEventListener("keydown", function (e) {
+                if (e.key === "Enter") { applyExpression(this.value); this.blur(); }
+            });
+
+            catalog.addEventListener("change", function () {
+                if (!catalog.value) return;
+                exprInput.value = "y = " + catalog.value;
+                renderLatex(exprInput.value);
+                applyExpression(exprInput.value);
+                catalog.value = "";
+            });
 
             graphState.onCursorChange = criticalPoints ? criticalPoints.cursorHandler : function (x, y, isValid) {
                 sonification.setFrequencyFromY(y, isValid);
             };
 
             function updateSettingsUi(stepSize, repeatDelayMs, shouldStopAtCritical) {
-                if (stepInput) {
-                    stepInput.value = String(stepSize);
-                }
-                if (bufferEl) {
-                    bufferEl.textContent = (repeatDelayMs / 1000).toFixed(1);
-                }
-                if (stopCriticalToggle) {
-                    stopCriticalToggle.checked = !!shouldStopAtCritical;
-                }
+                if (stepInput) stepInput.value = String(stepSize);
+                if (bufferEl) bufferEl.textContent = (repeatDelayMs / 1000).toFixed(1);
+                if (stopCriticalToggle) stopCriticalToggle.checked = !!shouldStopAtCritical;
             }
 
             graphState.onSettingsChange = function (stepSize, repeatDelayMs, shouldStopAtCritical) {
@@ -102,14 +213,10 @@
 
             if (stepInput) {
                 stepInput.addEventListener("change", function () {
-                    if (!graphState.setCursorStep(stepInput.value)) {
-                        stepInput.value = String(graphState.getCursorStep());
-                    }
+                    if (!graphState.setCursorStep(stepInput.value)) stepInput.value = String(graphState.getCursorStep());
                 });
                 stepInput.addEventListener("blur", function () {
-                    if (!graphState.setCursorStep(stepInput.value)) {
-                        stepInput.value = String(graphState.getCursorStep());
-                    }
+                    if (!graphState.setCursorStep(stepInput.value)) stepInput.value = String(graphState.getCursorStep());
                 });
             }
             if (stopCriticalToggle) {
@@ -119,17 +226,14 @@
             }
 
             graphState.init();
-            onFunctionChange();
-            updateSettingsUi(
-                graphState.getCursorStep(),
-                graphState.getRepeatDelayMs(),
-                graphState.getStopAtCriticalPoints()
-            );
+            exprInput.value = "y = sin(x)";
+            renderLatex(exprInput.value);
+            applyExpression(exprInput.value);
+            updateSettingsUi(graphState.getCursorStep(), graphState.getRepeatDelayMs(), graphState.getStopAtCriticalPoints());
 
-            if (focusRegion) {
-                focusRegion.focus();
-            }
+            if (focusRegion) focusRegion.focus();
         })();
     </script>
 </body>
+
 </html>
