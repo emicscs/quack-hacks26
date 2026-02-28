@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph Mode – Audible Math</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.0.0/math.min.js"></script>
+</head>
+<body>
+    <main role="main" aria-label="Graph mode – explore function with sound">
+        <h1>Graph Mode</h1>
+
+        <section aria-label="Function selection">
+            <label for="function-catalog">Popular Graphs</label>
+            <select id="function-catalog" aria-describedby="catalog-desc">
+                <option value="sin(x)">f(x) = sin(x)</option>
+                <option value="x^2">f(x) = x²</option>
+                <option value="1/x">f(x) = 1/x</option>
+                <option value="x">f(x) = x</option>
+                <option value="sqrt(x)">f(x) = √x</option>
+            </select>
+            <span id="catalog-desc" class="visually-hidden">Choose a function to graph and sonify.</span>
+        </section>
+
+        <div id="graph" role="img" aria-label="Graph of function"></div>
+
+        <section aria-live="polite" aria-atomic="true" id="live-region" class="live-region">
+            Current: x = <span id="current-x">0</span>, y = <span id="current-y">0</span>
+        </section>
+
+        <p class="instructions">Use <kbd>←</kbd> and <kbd>→</kbd> to move along the x-axis. Pitch reflects the y-value.</p>
+        <div id="keyboard-focus-region" tabindex="0" class="visually-hidden" aria-label="Graph exploration area. Use arrow keys to move."></div>
+    </main>
+
+    <script src="js/math-engine.js"></script>
+    <script src="js/graph-state.js"></script>
+    <script src="js/sonification.js"></script>
+    <script src="js/voice-intro.js"></script>
+    <script>
+        (function initGraphMode() {
+            const catalog = document.getElementById("function-catalog");
+            const focusRegion = document.getElementById("keyboard-focus-region");
+            const graphState = window.AudibleMath.graphState;
+            const sonification = window.AudibleMath.sonification;
+            const voiceIntro = window.AudibleMath.voiceIntro;
+
+            function onFunctionChange() {
+                const expr = catalog.value;
+                graphState.setFunction(expr);
+                graphState.drawGraph();
+                graphState.updateCursorDisplay();
+                if (voiceIntro && voiceIntro.speakIntro) {
+                    voiceIntro.speakIntro(graphState.getFunctionLabel(), graphState.getDomain());
+                }
+            }
+
+            catalog.addEventListener("change", onFunctionChange);
+
+            graphState.onCursorChange = function (x, y, isValid) {
+                sonification.setFrequencyFromY(y, isValid);
+            };
+
+            graphState.init();
+            onFunctionChange();
+
+            if (focusRegion) {
+                focusRegion.focus();
+            }
+        })();
+    </script>
+</body>
+</html>

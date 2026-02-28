@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+
+<body>
+
+    <div id="graph"></div>
+
+    <label>a:</label>
+    <input type="range" id="aSlider" min="-5" max="5" step="0.1" value="1">
+
+    <script>
+        function drawGraph(a) {
+            let x = [];
+            let y = [];
+
+            for (let i = -10; i <= 10; i += 0.1) {
+                x.push(i);
+                y.push(a * i * i);
+            }
+
+            Plotly.newPlot("graph", [{
+                x: x,
+                y: y,
+                mode: "lines"
+            }]);
+        }
+
+        let slider = document.getElementById("aSlider");
+
+        slider.oninput = function () {
+            drawGraph(parseFloat(this.value));
+        };
+
+        drawGraph(1);
+    </script>
+
+</body>
+
+</html>
