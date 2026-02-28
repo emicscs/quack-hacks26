@@ -1,0 +1,77 @@
+import "dotenv/config";
+import express from "express";
+import { GoogleGenAI } from "@google/genai";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json({ limit: "10mb" }));
+app.use(express.static(path.join(__dirname, "..")));
+
+const DESCRIBE_PROMPT = `You are describing a mathematical function for a blind user. Given the equation and an image of its graph, provide a short, clear spoken description. Include:
+1. The type of function (e.g. linear, quadratic, exponential, trigonometric, rational).
+2. Domain and range or bounds if relevant (e.g. "x from 0 to 10", "y is always positive").
+3. Any asymptotes or behavior at infinity (e.g. "vertical asymptote at x equals zero", "goes to infinity as x increases").
+4. One or two other key traits (e.g. "parabola opening upward", "oscillates between minus 1 and 1").
+Write in a way that is natural to read aloud. Use "x" and "y" and simple words. Keep it to about 3 to 5 sentences.`;
+
+app.post("/api/describe", async (req, res) => {
+  const { equation, imageBase64 } = req.body;
+
+  if (!equation || !imageBase64) {
+    return res.status(400).json({ error: "Missing equation or imageBase64" });
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === "AIzaSyAXGPw_OqFOaZbaST7FC5lfz2Z_AIz6sJA") {
+    return res.status(500).json({
+      error: "Server is missing GEMINI_API_KEY. Add it to server/.env",
+    });
+  }
+
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+
+    const contents = [
+      {
+        inlineData: {
+          mimeType: "image/png",
+          data: imageBase64.replace(/^data:image\/\w+;base64,/, ""),
+        },
+      },
+      {
+        text: `Equation: f(x) = ${equation}\n\n${DESCRIBE_PROMPT}`,
+      },
+    ];
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents,
+    });
+
+    const text =
+      response?.text ??
+      (response?.candidates?.[0]?.content?.parts || [])
+        .map((p) => p?.text)
+        .filter(Boolean)
+        .join(" ") ??
+      "";
+    if (!text) {
+      return res.status(502).json({ error: "No description returned from API" });
+    }
+
+    res.json({ description: text.trim() });
+  } catch (err) {
+    console.error("Gemini describe error:", err.message);
+    res.status(500).json({
+      error: err.message || "Failed to generate description",
+    });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}`);
+});
