@@ -8,12 +8,14 @@
     if (!mathEngine) return;
 
     var currentExpr = "sin(x)";
+    var currentParams = {};
     var domain = { min: -2 * Math.PI, max: 2 * Math.PI };
     var step = 0.1;
     var cursorStep = 0.1;
     var currentX = 0;
     var dataXY = { x: [], y: [] };
     var onCursorChange = function () {};
+    var graphRenderer = null;
 
     var catalogDomains = {
         "sin(x)": { min: -2 * Math.PI, max: 2 * Math.PI },
@@ -25,13 +27,30 @@
 
     function setFunction(expr) {
         currentExpr = expr;
+        currentParams = {};
         domain = catalogDomains[expr] || { min: -5, max: 5 };
-        dataXY = mathEngine.sample(currentExpr, domain.min, domain.max, step);
+        dataXY = mathEngine.sample(currentExpr, domain.min, domain.max, step, currentParams);
         currentX = domain.min;
     }
 
+    function setExpression(expr, params) {
+        currentExpr = expr || currentExpr;
+        currentParams = params && typeof params === "object" ? Object.assign({}, params) : {};
+        dataXY = mathEngine.sample(currentExpr, domain.min, domain.max, step, currentParams);
+        currentX = Math.max(domain.min, Math.min(domain.max, currentX));
+    }
+
+    function setDomain(min, max) {
+        domain = { min: min, max: max };
+        currentX = Math.max(min, Math.min(max, currentX));
+    }
+
+    function setGraphRenderer(renderer) {
+        graphRenderer = renderer;
+    }
+
     function getYAt(x) {
-        var y = mathEngine.evaluate(currentExpr, x);
+        var y = mathEngine.evaluate(currentExpr, x, currentParams);
         return typeof y === "number" && isFinite(y) ? y : NaN;
     }
 
@@ -57,6 +76,10 @@
     }
 
     function updatePlotlyCursor() {
+        if (graphRenderer && graphRenderer.setCursorX) {
+            graphRenderer.setCursorX(currentX);
+            return;
+        }
         if (typeof Plotly === "undefined") return;
         var graphDiv = document.getElementById("graph");
         if (!graphDiv || !graphDiv.data) return;
@@ -73,8 +96,17 @@
     }
 
     function drawGraph() {
+        if (graphRenderer && graphRenderer.updateData) {
+            graphRenderer.setDomain(domain.min, domain.max);
+            graphRenderer.updateData(currentExpr, currentParams, domain);
+            currentX = domain.min;
+            updatePlotlyCursor();
+            var y = getYAt(currentX);
+            onCursorChange(currentX, typeof y === "number" && isFinite(y) ? y : 0, !isNaN(y) && isFinite(y));
+            return;
+        }
         if (typeof Plotly === "undefined") return;
-        dataXY = mathEngine.sample(currentExpr, domain.min, domain.max, step);
+        dataXY = mathEngine.sample(currentExpr, domain.min, domain.max, step, currentParams);
         var trace = { x: dataXY.x, y: dataXY.y, mode: "lines", type: "scatter", name: "f(x)" };
         var layout = {
             paper_bgcolor: "#1a1a1a",
@@ -116,8 +148,14 @@
         }
     }
 
-    function init() {
-        setFunction(document.getElementById("function-catalog").value || "sin(x)");
+    function init(useCatalog) {
+        var catalog = document.getElementById("function-catalog");
+        if (useCatalog !== false && catalog) {
+            setFunction(catalog.value || "sin(x)");
+        } else {
+            setExpression("sin(x)", {});
+            setDomain(-2 * Math.PI, 2 * Math.PI);
+        }
 
         document.addEventListener("keydown", function (e) {
             if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
@@ -136,6 +174,9 @@
     global.AudibleMath = global.AudibleMath || {};
     global.AudibleMath.graphState = {
         setFunction: setFunction,
+        setExpression: setExpression,
+        setDomain: setDomain,
+        setGraphRenderer: setGraphRenderer,
         moveCursor: moveCursor,
         drawGraph: drawGraph,
         updateCursorDisplay: updateCursorDisplay,

@@ -1,0 +1,317 @@
+/* Full-screen Desmos-style two-panel layout */
+
+.desmos-body {
+    margin: 0;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: row;
+    background: var(--bg, #1a1a1a);
+    color: var(--fg, #e8e8e8);
+    font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Left panel: 25% width, 300–400px, scrollable */
+.desmos-panel--left {
+    width: 25%;
+    max-width: 400px;
+    min-width: 300px;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    border-right: 1px solid var(--desmos-border, #333);
+    background: var(--desmos-panel-bg, #1e1e1e);
+}
+
+.desmos-panel-header {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--desmos-border, #333);
+}
+
+.desmos-panel-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.desmos-btn {
+    padding: 6px 12px;
+    font-size: 0.875rem;
+    font-family: inherit;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--fg, #e8e8e8);
+}
+
+.desmos-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.desmos-btn--add {
+    color: var(--accent, #4a9eff);
+    border-color: var(--accent, #4a9eff);
+}
+
+.desmos-btn--add:hover {
+    background: rgba(74, 158, 255, 0.15);
+}
+
+.desmos-expression-list {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px;
+    min-height: 0;
+}
+
+/* Right panel: graph area 75–80% width */
+.desmos-panel--right {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    position: relative;
+}
+
+.desmos-graph-header {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    margin: 0;
+    border-bottom: 1px solid var(--desmos-border, #333);
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.desmos-graph-wrap {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+}
+
+.desmos-graph {
+    width: 100%;
+    height: 100%;
+    min-height: 300px;
+}
+
+.desmos-graph-toolbar {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    gap: 6px;
+}
+
+.desmos-toolbar-btn {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+    font-family: inherit;
+    border-radius: 4px;
+    border: 1px solid var(--desmos-border, #444);
+    background: var(--desmos-panel-bg, #252525);
+    color: var(--fg, #e8e8e8);
+    cursor: pointer;
+}
+
+.desmos-toolbar-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.desmos-toolbar-btn--active {
+    background: rgba(74, 158, 255, 0.2);
+    border-color: var(--accent, #4a9eff);
+}
+
+/* Instructions above graph (Graph Mode) */
+.desmos-instructions {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--muted, #aaa);
+}
+
+.desmos-instructions kbd {
+    padding: 0.15rem 0.4rem;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 0.2rem;
+}
+
+/* Live region overlay at bottom of graph (Graph Mode) */
+.desmos-live-region {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    margin: 0;
+}
+
+/* Expression row */
+.desmos-row {
+    margin-bottom: 10px;
+    border-radius: 6px;
+    border: 1px solid var(--desmos-border, #333);
+    background: var(--desmos-row-bg, #252525);
+    overflow: hidden;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.desmos-row:focus-within {
+    border-color: var(--accent, #4a9eff);
+    box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+}
+
+.desmos-row--error {
+    border-color: var(--desmos-error, #c55);
+}
+
+.desmos-row__header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    min-height: 36px;
+}
+
+.desmos-row__color {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.2);
+}
+
+.desmos-row__input-wrap {
+    flex: 1;
+    min-width: 0;
+}
+
+.desmos-row__input {
+    width: 100%;
+    padding: 4px 6px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    background: transparent;
+    border: none;
+    color: var(--fg, #e8e8e8);
+    outline: none;
+}
+
+.desmos-row__input::placeholder {
+    color: var(--muted, #666);
+}
+
+.desmos-row__actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.desmos-row__btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted, #888);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.desmos-row__btn:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--fg, #e8e8e8);
+}
+
+.desmos-row__btn--eye-off {
+    color: var(--muted, #666);
+}
+
+.desmos-row__preview {
+    padding: 6px 8px 6px 26px;
+    min-height: 28px;
+    font-size: 0.9rem;
+    color: var(--desmos-preview-fg, #a0b8d4);
+    border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.desmos-row__preview .katex {
+    font-size: 0.95em;
+}
+
+.desmos-row__preview--empty {
+    color: var(--muted, #555);
+}
+
+.desmos-row__preview--error {
+    color: var(--desmos-error, #e88);
+}
+
+.desmos-row__error {
+    padding: 4px 8px 6px 26px;
+    font-size: 0.8rem;
+    color: var(--desmos-error, #e88);
+    background: rgba(200, 80, 80, 0.1);
+    border-top: 1px solid rgba(200, 80, 80, 0.2);
+}
+
+.desmos-row__sliders {
+    padding: 6px 8px 8px 26px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+}
+
+.desmos-row__slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.desmos-row__slider-wrap label {
+    font-size: 0.8rem;
+    color: var(--muted, #888);
+    min-width: 14px;
+}
+
+.desmos-row__slider {
+    width: 80px;
+    height: 4px;
+    accent-color: var(--accent, #4a9eff);
+    cursor: pointer;
+}
+
+.desmos-row__slider-value {
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted, #888);
+    min-width: 28px;
+}
+
+/* Responsive: stack on very small screens */
+@media (max-width: 640px) {
+    .desmos-body {
+        flex-direction: column;
+    }
+
+    .desmos-panel--left {
+        max-width: none;
+        min-width: 0;
+        max-height: 40vh;
+    }
+
+    .desmos-panel--right {
+        min-height: 60vh;
+    }
+}

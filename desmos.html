@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graphing Calculator – Desmos-style</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/desmos.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.0.0/math.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+</head>
+<body class="desmos-body">
+    <aside class="desmos-panel desmos-panel--left" aria-label="Expressions">
+        <div class="desmos-panel-header">
+            <h2 class="desmos-panel-title">Expressions</h2>
+            <button type="button" class="desmos-btn desmos-btn--add" id="desmos-add-row" aria-label="Add expression">+ Add</button>
+        </div>
+        <div class="desmos-expression-list" id="desmos-expression-list"></div>
+    </aside>
+    <main class="desmos-panel desmos-panel--right" aria-label="Graph">
+        <div class="desmos-graph-wrap">
+            <div id="desmos-graph" class="desmos-graph" role="img" aria-label="Graph"></div>
+        </div>
+        <div class="desmos-graph-toolbar">
+            <button type="button" class="desmos-toolbar-btn" id="desmos-zoom-fit" title="Fit view">Fit</button>
+            <button type="button" class="desmos-toolbar-btn" id="desmos-axis-lock" title="Lock equal axes">1:1</button>
+        </div>
+    </main>
+
+    <script src="js/math-engine.js"></script>
+    <script src="js/expression-list.js"></script>
+    <script src="js/expression-row.js"></script>
+    <script src="js/graph-canvas.js"></script>
+    <script src="js/desmos-app.js"></script>
+</body>
+</html>
+
+

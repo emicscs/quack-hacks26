@@ -5,70 +5,118 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Graph Mode – Audible Math</title>
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/desmos.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.0.0/math.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
 </head>
-<body>
-    <main role="main" aria-label="Graph mode – explore function with sound">
-        <h1>Graph Mode</h1>
-
-        <section aria-label="Function selection">
-            <label for="function-catalog">Popular Graphs</label>
-            <select id="function-catalog" aria-describedby="catalog-desc">
-                <option value="sin(x)">f(x) = sin(x)</option>
-                <option value="x^2">f(x) = x²</option>
-                <option value="1/x">f(x) = 1/x</option>
-                <option value="x">f(x) = x</option>
-                <option value="sqrt(x)">f(x) = √x</option>
-            </select>
-            <span id="catalog-desc" class="visually-hidden">Choose a function to graph and sonify.</span>
-        </section>
-
-        <div id="graph" role="img" aria-label="Graph of function"></div>
-
-        <section aria-live="polite" aria-atomic="true" id="live-region" class="live-region">
+<body class="desmos-body">
+    <aside class="desmos-panel desmos-panel--left" aria-label="Expressions">
+        <div class="desmos-panel-header">
+            <h2 class="desmos-panel-title">Graph Mode</h2>
+            <button type="button" class="desmos-btn desmos-btn--add" id="desmos-add-row" aria-label="Add expression">+ Add</button>
+        </div>
+        <div class="desmos-expression-list" id="desmos-expression-list"></div>
+    </aside>
+    <main class="desmos-panel desmos-panel--right" aria-label="Graph">
+        <div class="desmos-graph-header">
+            <p class="instructions desmos-instructions">Use <kbd>←</kbd> and <kbd>→</kbd> to move along the x-axis. Pitch reflects the y-value. Pan and zoom by dragging and scrolling.</p>
+        </div>
+        <div class="desmos-graph-wrap">
+            <div id="desmos-graph" class="desmos-graph" role="img" aria-label="Graph"></div>
+        </div>
+        <div class="desmos-graph-toolbar">
+            <button type="button" class="desmos-toolbar-btn" id="desmos-zoom-fit" title="Fit view">Fit</button>
+            <button type="button" class="desmos-toolbar-btn" id="desmos-axis-lock" title="Lock equal axes">1:1</button>
+        </div>
+        <section aria-live="polite" aria-atomic="true" id="live-region" class="live-region desmos-live-region">
             Current: x = <span id="current-x">0</span>, y = <span id="current-y">0</span>
         </section>
-
-        <p class="instructions">Use <kbd>←</kbd> and <kbd>→</kbd> to move along the x-axis. Pitch reflects the y-value.</p>
         <div id="keyboard-focus-region" tabindex="0" class="visually-hidden" aria-label="Graph exploration area. Use arrow keys to move."></div>
     </main>
 
     <script src="js/math-engine.js"></script>
+    <script src="js/expression-list.js"></script>
+    <script src="js/expression-row.js"></script>
+    <script src="js/graph-canvas.js"></script>
     <script src="js/graph-state.js"></script>
     <script src="js/sonification.js"></script>
     <script src="js/voice-intro.js"></script>
     <script>
         (function initGraphMode() {
-            const catalog = document.getElementById("function-catalog");
-            const focusRegion = document.getElementById("keyboard-focus-region");
-            const graphState = window.AudibleMath.graphState;
-            const sonification = window.AudibleMath.sonification;
-            const voiceIntro = window.AudibleMath.voiceIntro;
-
-            function onFunctionChange() {
-                const expr = catalog.value;
-                graphState.setFunction(expr);
-                graphState.drawGraph();
-                graphState.updateCursorDisplay();
-                if (voiceIntro && voiceIntro.speakIntro) {
-                    voiceIntro.speakIntro(graphState.getFunctionLabel(), graphState.getDomain());
+        
+            const graphDiv = document.getElementById("desmos-graph");
+            const listContainer = document.getElementById("desmos-expression-list");
+            const addBtn = document.getElementById("desmos-add-row");
+        
+            let expressions = [];
+        
+            // ----------- FORCE PLOTLY INIT -------------
+            Plotly.newPlot(graphDiv, [{
+                x: [],
+                y: [],
+                mode: "lines",
+                name: "f(x)"
+            }], {
+                margin: { t: 20 },
+                xaxis: { range: [-10, 10] },
+                yaxis: { range: [-10, 10] }
+            });
+        
+            function drawExpression(exprString) {
+                try {
+                    const compiled = math.compile(exprString.replace("y =", ""));
+                    let xValues = [];
+                    let yValues = [];
+        
+                    for (let x = -10; x <= 10; x += 0.1) {
+                        xValues.push(x);
+                        yValues.push(compiled.evaluate({ x: x }));
+                    }
+        
+                    Plotly.react(graphDiv, [{
+                        x: xValues,
+                        y: yValues,
+                        mode: "lines",
+                        line: { width: 3 }
+                    }], {
+                        margin: { t: 20 },
+                        xaxis: { range: [-10, 10] },
+                        yaxis: { range: [-10, 10] }
+                    });
+        
+                } catch (err) {
+                    console.log("Invalid expression:", err);
                 }
             }
-
-            catalog.addEventListener("change", onFunctionChange);
-
-            graphState.onCursorChange = function (x, y, isValid) {
-                sonification.setFrequencyFromY(y, isValid);
-            };
-
-            graphState.init();
-            onFunctionChange();
-
-            if (focusRegion) {
-                focusRegion.focus();
+        
+            // ----------- SIMPLE EXPRESSION SYSTEM -------------
+            function addExpression(defaultValue) {
+                const input = document.createElement("input");
+                input.type = "text";
+                input.value = defaultValue || "y = sin(x)";
+                input.style.width = "100%";
+                input.style.marginBottom = "10px";
+        
+                input.addEventListener("input", function () {
+                    drawExpression(this.value);
+                });
+        
+                listContainer.appendChild(input);
+        
+                drawExpression(input.value);
             }
+        
+            addExpression("y = sin(x)");
+        
+            if (addBtn) {
+                addBtn.addEventListener("click", function () {
+                    addExpression("y = x");
+                });
+            }
+        
         })();
-    </script>
-</body>
+        </script>
+    </body>
 </html>
