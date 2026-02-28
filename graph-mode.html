@@ -38,6 +38,7 @@
     <script src="js/graph-state.js"></script>
     <script src="js/sonification.js"></script>
     <script src="js/voice-intro.js"></script>
+    <script src="criticalPointDetector.js"></script>
     <script>
         (function initGraphMode() {
             const catalog = document.getElementById("function-catalog");
@@ -46,11 +47,19 @@
             const sonification = window.AudibleMath.sonification;
             const voiceIntro = window.AudibleMath.voiceIntro;
 
+            const criticalPoints = window.CriticalPointDetector && CriticalPointDetector.integrate({
+                graphSelector: "#graph",
+                getCursorX: function () { return graphState.currentX; },
+                onCursorChange: function (x, y, isValid) { sonification.setFrequencyFromY(y, isValid); }
+            });
+            if (criticalPoints) window.criticalPoints = criticalPoints;
+
             function onFunctionChange() {
                 const expr = catalog.value;
                 graphState.setFunction(expr);
                 graphState.drawGraph();
                 graphState.updateCursorDisplay();
+                if (criticalPoints) criticalPoints.run();
                 if (voiceIntro && voiceIntro.speakIntro) {
                     voiceIntro.speakIntro(graphState.getFunctionLabel(), graphState.getDomain());
                 }
@@ -58,7 +67,7 @@
 
             catalog.addEventListener("change", onFunctionChange);
 
-            graphState.onCursorChange = function (x, y, isValid) {
+            graphState.onCursorChange = criticalPoints ? criticalPoints.cursorHandler : function (x, y, isValid) {
                 sonification.setFrequencyFromY(y, isValid);
             };
 
