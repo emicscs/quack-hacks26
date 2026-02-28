@@ -17,8 +17,8 @@
     var dataXY = { x: [], y: [] };
     var criticalPoints = [];
     var hoverPoint = null;
-    var onCursorChange = function () {};
-    var onSettingsChange = function () {};
+    var onCursorChange = function () { };
+    var onSettingsChange = function () { };
 
     var REPEAT_DELAY_MIN_MS = 100;
     var REPEAT_DELAY_MAX_MS = 2000;
