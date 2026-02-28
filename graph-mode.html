@@ -84,6 +84,10 @@
 
             var criticalPoints = window.CriticalPointDetector && CriticalPointDetector.integrate({
                 graphSelector: "#graph",
+                getData: function () {
+                    var d = graphState.dataXY;
+                    return (d && d.x && d.y) ? { x: d.x.slice(), y: d.y.slice() } : null;
+                },
                 getCursorX: function () { return graphState.currentX; },
                 onCursorChange: function (x, y, isValid) { sonification.setFrequencyFromY(y, isValid); }
             });

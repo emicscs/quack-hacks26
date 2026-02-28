@@ -316,9 +316,19 @@
             var prevSign = dyPrev > slopeEps ? 1 : (dyPrev < -slopeEps ? -1 : 0);
             var nextSign = dyNext > slopeEps ? 1 : (dyNext < -slopeEps ? -1 : 0);
             if (prevSign > 0 && nextSign < 0) {
-                addCriticalPoint(points, xs[i], ys[i], "max");
+                var leftX = xs[i - 1], rightX = xs[i + 1];
+                var leftD = derivativeAt(leftX), rightD = derivativeAt(rightX);
+                var xRefined = refineTurningPoint(leftX, rightX, leftD, rightD);
+                var x = (typeof xRefined === "number" && isFinite(xRefined)) ? xRefined : xs[i];
+                var y = getYAt(x);
+                addCriticalPoint(points, x, typeof y === "number" && isFinite(y) ? y : ys[i], "max");
             } else if (prevSign < 0 && nextSign > 0) {
-                addCriticalPoint(points, xs[i], ys[i], "min");
+                var leftX = xs[i - 1], rightX = xs[i + 1];
+                var leftD = derivativeAt(leftX), rightD = derivativeAt(rightX);
+                var xRefined = refineTurningPoint(leftX, rightX, leftD, rightD);
+                var x = (typeof xRefined === "number" && isFinite(xRefined)) ? xRefined : xs[i];
+                var y = getYAt(x);
+                addCriticalPoint(points, x, typeof y === "number" && isFinite(y) ? y : ys[i], "min");
             }
         }
 
@@ -387,21 +397,6 @@
             connectgaps: false,
             hovertemplate: "(%{x:.2f}, %{y:.2f})<extra></extra>"
         };
-        var criticalTrace = {
-            x: criticalPoints.map(function (p) { return p.x; }),
-            y: criticalPoints.map(function (p) { return p.y; }),
-            mode: "markers",
-            type: "scatter",
-            name: "critical points",
-            marker: { color: "#0d47a1", size: 8, symbol: "circle-open" },
-            customdata: criticalPoints.map(function (p) { return criticalTypeLabel(p.type); }),
-            hovertemplate: "(%{x:.2f}, %{y:.2f})<br>%{customdata}<extra></extra>",
-            hoverlabel: {
-                bgcolor: "#0d47a1",
-                bordercolor: "#0d47a1",
-                font: { color: "#ffffff" }
-            }
-        };
         var layout = {
             paper_bgcolor: "#1a1a1a",
             plot_bgcolor: "#252525",
@@ -413,7 +408,7 @@
             showlegend: true
         };
         var config = { responsive: true };
-        Plotly.newPlot("graph", [trace, criticalTrace], layout, config);
+        Plotly.newPlot("graph", [trace], layout, config);
         var graphDiv = document.getElementById("graph");
         bindHoverTracking(graphDiv);
         currentX = domain.min;

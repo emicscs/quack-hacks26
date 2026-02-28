@@ -22,6 +22,48 @@
 
     var AudioContext = global.AudioContext || global.webkitAudioContext;
 
+    /**
+     * Refine a candidate min/max at index i by fitting a parabola through
+     * (x[i-1],y[i-1]), (x[i],y[i]), (x[i+1],y[i+1]) and returning the vertex.
+     * Returns null if refinement is invalid (e.g. linear segment).
+     */
+    function refineExtremum(x, y, i, isMin) {
+        var x0 = x[i - 1], x1 = x[i], x2 = x[i + 1];
+        var y0 = y[i - 1], y1 = y[i], y2 = y[i + 1];
+        var d0 = (y1 - y0) / (x1 - x0);
+        var d1 = (y2 - y1) / (x2 - x1);
+        var denom = x2 - x0;
+        if (denom === 0) return null;
+        var a = (d1 - d0) / denom;
+        var b = d0 - a * (x1 + x0);
+        if (a === 0) return null;
+        if (isMin && a < 0) return null;
+        if (!isMin && a > 0) return null;
+        var xv = -b / (2 * a);
+        xv = Math.max(x0, Math.min(x2, xv));
+        var c = y0 - a * x0 * x0 - b * x0;
+        var yv = a * xv * xv + b * xv + c;
+        return { x: xv, y: yv };
+    }
+
+    /**
+     * Refine an inflection candidate at j (second-derivative sign change).
+     * Use second-difference values at j-1, j, j+1 and linear zero-crossing for x.
+     */
+    function refineInflection(x, y, j) {
+        if (j < 2 || j >= x.length - 2) return { x: x[j], y: y[j] };
+        var d2Left = y[j] - 2 * y[j - 1] + y[j - 2];
+        var d2Right = y[j + 2] - 2 * y[j + 1] + y[j];
+        var denom = d2Right - d2Left;
+        if (denom === 0) return { x: x[j], y: y[j] };
+        var xLeft = x[j - 1], xRight = x[j + 1];
+        var t = -d2Left / denom;
+        t = Math.max(0, Math.min(1, t));
+        var xInf = xLeft + t * (xRight - xLeft);
+        var yInf = y[j - 1] + (y[j + 1] - y[j - 1]) * ((xInf - x[j - 1]) / (x[j + 1] - x[j - 1] || 1));
+        return { x: xInf, y: typeof yInf === "number" && isFinite(yInf) ? yInf : y[j] };
+    }
+
     function findCriticalPoints(x, y) {
         if (!x || !y || x.length !== y.length || x.length < 3) {
             return { minima: [], maxima: [], inflection: [] };
@@ -41,11 +83,13 @@
             var y1 = y[i + 1];
             if (!isFiniteNum(yi) || !isFiniteNum(y0) || !isFiniteNum(y1)) continue;
 
-            if (yi <= y0 && yi <= y1) {
-                if (yi < y0 || yi < y1) minima.push({ x: x[i], y: yi });
+            if (yi <= y0 && yi <= y1 && (yi < y0 || yi < y1)) {
+                var refined = refineExtremum(x, y, i, true);
+                minima.push(refined || { x: x[i], y: yi });
             }
-            if (yi >= y0 && yi >= y1) {
-                if (yi > y0 || yi > y1) maxima.push({ x: x[i], y: yi });
+            if (yi >= y0 && yi >= y1 && (yi > y0 || yi > y1)) {
+                var refined = refineExtremum(x, y, i, false);
+                maxima.push(refined || { x: x[i], y: yi });
             }
         }
 
@@ -54,7 +98,8 @@
             var d2 = y[j + 1] - 2 * y[j] + y[j - 1];
             if (!isFiniteNum(d2)) continue;
             if (d2Prev !== null && d2Prev * d2 < 0) {
-                inflection.push({ x: x[j], y: y[j] });
+                var refined = refineInflection(x, y, j);
+                inflection.push(refined);
             }
             d2Prev = d2;
         }
@@ -184,9 +229,20 @@
         var el = typeof container === "string" ? document.querySelector(container) : container;
         if (!el || !el.data || !el.data[0]) return null;
         var trace = el.data[0];
-        var x = trace.x;
-        var y = trace.y;
-        if (!x || !y || !x.length || !y.length) return null;
+        var rawX = trace.x;
+        var rawY = trace.y;
+        if (!rawX || !rawY || rawX.length !== rawY.length) return null;
+        var x = [];
+        var y = [];
+        for (var i = 0; i < rawX.length; i++) {
+            var xi = rawX[i];
+            var yi = rawY[i];
+            if (typeof xi === "number" && isFinite(xi) && typeof yi === "number" && isFinite(yi)) {
+                x.push(xi);
+                y.push(yi);
+            }
+        }
+        if (x.length < 3) return null;
         return { x: x, y: y };
     }
 
@@ -299,6 +355,9 @@
             if (!enabled || !graphSelector) return;
             setTimeout(function () {
                 var attachOptions = {};
+                if (options.getData && typeof options.getData === "function") {
+                    attachOptions.getData = options.getData;
+                }
                 if (getCursorX && typeof getCursorX === "function") {
                     attachOptions.getCursorX = getCursorX;
                 }
