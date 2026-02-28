@@ -10,10 +10,24 @@
     var currentExpr = "sin(x)";
     var domain = { min: -2 * Math.PI, max: 2 * Math.PI };
     var step = 0.1;
-    var cursorStep = 0.1;
+    var cursorStep = 1;
+    var repeatDelayMs = 200;
+    var stopAtCriticalPoints = false;
     var currentX = 0;
     var dataXY = { x: [], y: [] };
+    var criticalPoints = [];
+    var hoverPoint = null;
     var onCursorChange = function () {};
+    var onSettingsChange = function () {};
+
+    var REPEAT_DELAY_MIN_MS = 100;
+    var REPEAT_DELAY_MAX_MS = 2000;
+    var REPEAT_DELAY_INCREMENT_MS = 100;
+    var DELAY_HOLD_REPEAT_MS = 200;
+    var navTimerId = null;
+    var delayTimerId = null;
+    var activeNavKey = null;
+    var activeDelayKey = null;
 
     var catalogDomains = {
         "sin(x)": { min: -2 * Math.PI, max: 2 * Math.PI },
@@ -39,6 +53,12 @@
         var newX = currentX + delta;
         newX = Math.max(domain.min, Math.min(domain.max, newX));
         if (newX === currentX) return;
+        if (stopAtCriticalPoints) {
+            var criticalX = findCriticalPointBetween(currentX, newX);
+            if (criticalX !== null) {
+                newX = criticalX;
+            }
+        }
         currentX = newX;
         var y = getYAt(currentX);
         var isValid = !isNaN(y);
@@ -47,12 +67,179 @@
         onCursorChange(currentX, isValid ? y : 0, isValid);
     }
 
+    function findCriticalPointBetween(fromX, toX) {
+        if (fromX === toX) return null;
+        var minX = Math.min(fromX, toX);
+        var maxX = Math.max(fromX, toX);
+
+        // Fast path: many discontinuities occur at x = 0 (e.g., 1/x).
+        if (0 > minX && 0 < maxX) {
+            var yAtZero = getYAt(0);
+            if (isNaN(yAtZero)) return 0;
+        }
+
+        // Sample interior points so large cursor steps do not jump over undefined points.
+        var span = Math.abs(toX - fromX);
+        var sampleCount = Math.max(12, Math.min(240, Math.ceil(span / 0.05)));
+        for (var i = 1; i < sampleCount; i++) {
+            var t = i / sampleCount;
+            var x = fromX + (toX - fromX) * t;
+            var y = getYAt(x);
+            if (isNaN(y)) return x;
+        }
+        var turningX = findTurningPointBetween(fromX, toX);
+        if (turningX !== null) return turningX;
+        return null;
+    }
+
+    function derivativeAt(x) {
+        var h = 1e-4;
+        var yL = getYAt(x - h);
+        var yR = getYAt(x + h);
+        if (isNaN(yL) || isNaN(yR)) return NaN;
+        return (yR - yL) / (2 * h);
+    }
+
+    function hasSignFlip(a, b) {
+        return (a > 0 && b < 0) || (a < 0 && b > 0);
+    }
+
+    function refineTurningPoint(leftX, rightX, leftD, rightD) {
+        var midX = (leftX + rightX) / 2;
+        for (var i = 0; i < 20; i++) {
+            midX = (leftX + rightX) / 2;
+            var midD = derivativeAt(midX);
+            if (isNaN(midD)) break;
+            if (Math.abs(midD) < 1e-4) return midX;
+            if (hasSignFlip(leftD, midD)) {
+                rightX = midX;
+                rightD = midD;
+            } else {
+                leftX = midX;
+                leftD = midD;
+            }
+        }
+        return midX;
+    }
+
+    function findTurningPointBetween(fromX, toX) {
+        var span = Math.abs(toX - fromX);
+        var sampleCount = Math.max(16, Math.min(320, Math.ceil(span / 0.05)));
+        var slopeEps = 1e-3;
+        var prevX = fromX;
+        var prevD = derivativeAt(prevX);
+
+        for (var i = 1; i < sampleCount; i++) {
+            var t = i / sampleCount;
+            var x = fromX + (toX - fromX) * t;
+            var d = derivativeAt(x);
+            if (!isNaN(d) && Math.abs(d) < slopeEps) return x;
+            if (!isNaN(prevD) && !isNaN(d) && hasSignFlip(prevD, d)) {
+                return refineTurningPoint(prevX, x, prevD, d);
+            }
+            prevX = x;
+            prevD = d;
+        }
+        return null;
+    }
+
+    function clearNavTimer() {
+        if (navTimerId) {
+            clearInterval(navTimerId);
+            navTimerId = null;
+        }
+    }
+
+    function clearDelayTimer() {
+        if (delayTimerId) {
+            clearInterval(delayTimerId);
+            delayTimerId = null;
+        }
+    }
+
+    function notifySettingsChange() {
+        onSettingsChange(cursorStep, repeatDelayMs, stopAtCriticalPoints);
+    }
+
+    function clampRepeatDelayMs(value) {
+        var clamped = Math.round(value);
+        clamped = Math.max(REPEAT_DELAY_MIN_MS, Math.min(REPEAT_DELAY_MAX_MS, clamped));
+        return clamped;
+    }
+
+    function setCursorStep(value) {
+        var num = parseFloat(value);
+        if (!(typeof num === "number" && isFinite(num)) || num <= 0) return false;
+        cursorStep = num;
+        notifySettingsChange();
+        return true;
+    }
+
+    function setRepeatDelayMs(value) {
+        var num = parseFloat(value);
+        if (!(typeof num === "number" && isFinite(num))) return false;
+        var newDelay = clampRepeatDelayMs(num);
+        if (newDelay === repeatDelayMs) return true;
+        repeatDelayMs = newDelay;
+        if (activeNavKey) {
+            startNavRepeat(activeNavKey);
+        }
+        notifySettingsChange();
+        return true;
+    }
+
+    function adjustRepeatDelayMs(deltaMs) {
+        return setRepeatDelayMs(repeatDelayMs + deltaMs);
+    }
+
+    function getCursorStep() {
+        return cursorStep;
+    }
+
+    function getRepeatDelayMs() {
+        return repeatDelayMs;
+    }
+
+    function setStopAtCriticalPoints(value) {
+        stopAtCriticalPoints = !!value;
+        notifySettingsChange();
+        return true;
+    }
+
+    function getStopAtCriticalPoints() {
+        return stopAtCriticalPoints;
+    }
+
+    function navDeltaForKey(key) {
+        if (key === "ArrowLeft") return -cursorStep;
+        if (key === "ArrowRight") return cursorStep;
+        return 0;
+    }
+
+    function delayDeltaForKey(key) {
+        if (key === "ArrowUp") return REPEAT_DELAY_INCREMENT_MS;
+        if (key === "ArrowDown") return -REPEAT_DELAY_INCREMENT_MS;
+        return 0;
+    }
+
+    function startNavRepeat(key) {
+        clearNavTimer();
+        navTimerId = setInterval(function () {
+            var delta = navDeltaForKey(key);
+            if (delta !== 0) {
+                moveCursor(delta);
+            }
+        }, repeatDelayMs);
+    }
+
     function updateCursorDisplay() {
         var xEl = document.getElementById("current-x");
         var yEl = document.getElementById("current-y");
         if (!xEl || !yEl) return;
+        // Keep the displayed current coordinate tied to keyboard navigation state.
+        var x = currentX;
         var y = getYAt(currentX);
-        xEl.textContent = currentX.toFixed(2);
+        xEl.textContent = x.toFixed(2);
         yEl.textContent = (typeof y === "number" && isFinite(y)) ? y.toFixed(2) : "undefined";
     }
 
@@ -60,34 +247,177 @@
         if (typeof Plotly === "undefined") return;
         var graphDiv = document.getElementById("graph");
         if (!graphDiv || !graphDiv.data) return;
+        // Hover moves the x guide line again.
+        var x = hoverPoint ? hoverPoint.x : currentX;
+        var y = hoverPoint ? hoverPoint.y : getYAt(currentX);
         var shapes = [{
             type: "line",
-            x0: currentX,
-            x1: currentX,
+            x0: x,
+            x1: x,
             y0: 0,
             y1: 1,
             yref: "paper",
             line: { color: "#4a9eff", width: 2, dash: "dot" }
         }];
+        if (typeof y === "number" && isFinite(y)) {
+            shapes.push({
+                type: "line",
+                x0: domain.min,
+                x1: domain.max,
+                xref: "x",
+                y0: y,
+                y1: y,
+                yref: "y",
+                line: { color: "#4a9eff", width: 1.5, dash: "dot" }
+            });
+        }
         Plotly.relayout(graphDiv, { shapes: shapes });
+    }
+
+    function bindHoverTracking(graphDiv) {
+        if (!graphDiv || typeof graphDiv.on !== "function") return;
+        if (typeof graphDiv.removeAllListeners === "function") {
+            graphDiv.removeAllListeners("plotly_hover");
+            graphDiv.removeAllListeners("plotly_unhover");
+        }
+        graphDiv.on("plotly_hover", function (eventData) {
+            if (!eventData || !eventData.points || !eventData.points.length) return;
+            var point = eventData.points[0];
+            if (typeof point.x !== "number" || typeof point.y !== "number") return;
+            hoverPoint = { x: point.x, y: point.y };
+            updateCursorDisplay();
+            updatePlotlyCursor();
+        });
+        graphDiv.on("plotly_unhover", function () {
+            hoverPoint = null;
+            updateCursorDisplay();
+            updatePlotlyCursor();
+        });
+    }
+
+    function addCriticalPoint(list, x, y, type) {
+        if (!(typeof x === "number" && isFinite(x) && typeof y === "number" && isFinite(y))) return;
+        for (var i = 0; i < list.length; i++) {
+            if (Math.abs(list[i].x - x) < 0.05) return;
+        }
+        list.push({ x: x, y: y, type: type });
+    }
+
+    function calculateCriticalPoints() {
+        var points = [];
+        var xs = dataXY.x;
+        var ys = dataXY.y;
+        if (!xs || xs.length < 3) return points;
+
+        var slopeEps = 1e-6;
+        for (var i = 1; i < ys.length - 1; i++) {
+            var dyPrev = ys[i] - ys[i - 1];
+            var dyNext = ys[i + 1] - ys[i];
+            var prevSign = dyPrev > slopeEps ? 1 : (dyPrev < -slopeEps ? -1 : 0);
+            var nextSign = dyNext > slopeEps ? 1 : (dyNext < -slopeEps ? -1 : 0);
+            if (prevSign > 0 && nextSign < 0) {
+                addCriticalPoint(points, xs[i], ys[i], "max");
+            } else if (prevSign < 0 && nextSign > 0) {
+                addCriticalPoint(points, xs[i], ys[i], "min");
+            }
+        }
+
+        // Detect sampled gaps that indicate a discontinuity between finite segments.
+        for (var j = 0; j < xs.length - 1; j++) {
+            var gap = Math.abs(xs[j + 1] - xs[j]);
+            if (gap > step * 1.5) {
+                addCriticalPoint(points, xs[j], ys[j], "edge");
+                addCriticalPoint(points, xs[j + 1], ys[j + 1], "edge");
+            }
+        }
+
+        return points;
+    }
+
+    function criticalTypeLabel(type) {
+        if (type === "max") return "local max";
+        if (type === "min") return "local min";
+        if (type === "edge") return "discontinuity edge";
+        return "critical point";
+    }
+
+    function buildLineWithBreaks() {
+        var lineX = [];
+        var lineY = [];
+        var xs = dataXY.x;
+        var ys = dataXY.y;
+        var criticalSnapEps = Math.max(step * 0.6, 0.06);
+        for (var i = 0; i < xs.length; i++) {
+            var isNearCritical = false;
+            for (var c = 0; c < criticalPoints.length; c++) {
+                if (Math.abs(xs[i] - criticalPoints[c].x) <= criticalSnapEps) {
+                    isNearCritical = true;
+                    break;
+                }
+            }
+            if (isNearCritical) {
+                // Hide line hover at critical locations so only critical marker label appears.
+                continue;
+            }
+            if (i > 0) {
+                var gap = Math.abs(xs[i] - xs[i - 1]);
+                if (gap > step * 1.5) {
+                    // Null separators tell Plotly to break the line at discontinuities.
+                    lineX.push(null);
+                    lineY.push(null);
+                }
+            }
+            lineX.push(xs[i]);
+            lineY.push(ys[i]);
+        }
+        return { x: lineX, y: lineY };
     }
 
     function drawGraph() {
         if (typeof Plotly === "undefined") return;
         dataXY = mathEngine.sample(currentExpr, domain.min, domain.max, step);
-        var trace = { x: dataXY.x, y: dataXY.y, mode: "lines", type: "scatter", name: "f(x)" };
+        criticalPoints = calculateCriticalPoints();
+        var segmentedLine = buildLineWithBreaks();
+        var trace = {
+            x: segmentedLine.x,
+            y: segmentedLine.y,
+            mode: "lines",
+            type: "scatter",
+            name: "f(x)",
+            connectgaps: false,
+            hovertemplate: "(%{x:.2f}, %{y:.2f})<extra></extra>"
+        };
+        var criticalTrace = {
+            x: criticalPoints.map(function (p) { return p.x; }),
+            y: criticalPoints.map(function (p) { return p.y; }),
+            mode: "markers",
+            type: "scatter",
+            name: "critical points",
+            marker: { color: "#0d47a1", size: 8, symbol: "circle-open" },
+            customdata: criticalPoints.map(function (p) { return criticalTypeLabel(p.type); }),
+            hovertemplate: "(%{x:.2f}, %{y:.2f})<br>%{customdata}<extra></extra>",
+            hoverlabel: {
+                bgcolor: "#0d47a1",
+                bordercolor: "#0d47a1",
+                font: { color: "#ffffff" }
+            }
+        };
         var layout = {
             paper_bgcolor: "#1a1a1a",
             plot_bgcolor: "#252525",
             font: { color: "#e8e8e8", size: 12 },
-            xaxis: { title: "x", gridcolor: "#333", zerolinecolor: "#555" },
-            yaxis: { title: "y", gridcolor: "#333", zerolinecolor: "#555" },
+            hovermode: "closest",
+            xaxis: { title: "x", gridcolor: "#333", zerolinecolor: "#555", showspikes: false },
+            yaxis: { title: "y", gridcolor: "#333", zerolinecolor: "#555", showspikes: false },
             margin: { t: 40, r: 40, b: 50, l: 60 },
-            showlegend: false
+            showlegend: true
         };
         var config = { responsive: true };
-        Plotly.newPlot("graph", [trace], layout, config);
+        Plotly.newPlot("graph", [trace, criticalTrace], layout, config);
+        var graphDiv = document.getElementById("graph");
+        bindHoverTracking(graphDiv);
         currentX = domain.min;
+        hoverPoint = null;
         updatePlotlyCursor();
         var y = getYAt(currentX);
         onCursorChange(currentX, typeof y === "number" && isFinite(y) ? y : 0, !isNaN(y) && isFinite(y));
@@ -118,17 +448,37 @@
 
     function init() {
         setFunction(document.getElementById("function-catalog").value || "sin(x)");
+        notifySettingsChange();
 
         document.addEventListener("keydown", function (e) {
             if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-            if (e.key === "ArrowLeft") {
+            if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
                 e.preventDefault();
+                if (e.repeat || activeNavKey === e.key) return;
                 resumeAudioIfNeeded();
-                moveCursor(-cursorStep);
-            } else if (e.key === "ArrowRight") {
+                activeNavKey = e.key;
+                moveCursor(navDeltaForKey(e.key));
+                startNavRepeat(e.key);
+            } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
                 e.preventDefault();
-                resumeAudioIfNeeded();
-                moveCursor(cursorStep);
+                if (e.repeat || activeDelayKey === e.key) return;
+                activeDelayKey = e.key;
+                adjustRepeatDelayMs(delayDeltaForKey(e.key));
+                clearDelayTimer();
+                delayTimerId = setInterval(function () {
+                    adjustRepeatDelayMs(delayDeltaForKey(activeDelayKey));
+                }, DELAY_HOLD_REPEAT_MS);
+            }
+        });
+
+        document.addEventListener("keyup", function (e) {
+            if (e.key === activeNavKey) {
+                activeNavKey = null;
+                clearNavTimer();
+            }
+            if (e.key === activeDelayKey) {
+                activeDelayKey = null;
+                clearDelayTimer();
             }
         });
     }
@@ -140,6 +490,12 @@
         drawGraph: drawGraph,
         updateCursorDisplay: updateCursorDisplay,
         getYAt: getYAt,
+        setCursorStep: setCursorStep,
+        getCursorStep: getCursorStep,
+        setRepeatDelayMs: setRepeatDelayMs,
+        getRepeatDelayMs: getRepeatDelayMs,
+        setStopAtCriticalPoints: setStopAtCriticalPoints,
+        getStopAtCriticalPoints: getStopAtCriticalPoints,
         get currentX() { return currentX; },
         get dataXY() { return dataXY; },
         get domain() { return domain; },
@@ -147,6 +503,8 @@
         getDomain: getDomain,
         init: init,
         get onCursorChange() { return onCursorChange; },
-        set onCursorChange(f) { onCursorChange = f; }
+        set onCursorChange(f) { onCursorChange = f; },
+        get onSettingsChange() { return onSettingsChange; },
+        set onSettingsChange(f) { onSettingsChange = f; }
     };
 })(typeof window !== "undefined" ? window : this);

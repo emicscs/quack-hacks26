@@ -9,7 +9,7 @@
         if (!window.speechSynthesis) return;
         var domainMin = domain && domain.min != null ? domain.min.toFixed(1) : "?";
         var domainMax = domain && domain.max != null ? domain.max.toFixed(1) : "?";
-        var text = "Graph of " + functionLabel + ", from x equals " + domainMin + " to " + domainMax + ". Use left and right arrow keys to move.";
+        var text = "Graph of " + functionLabel + ", from x equals " + domainMin + " to " + domainMax + ". Use left and right arrows to move in steps. Use up and down arrows to adjust the step interval.";
         var u = new SpeechSynthesisUtterance(text);
         u.rate = 0.95;
         u.pitch = 1;
