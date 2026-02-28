@@ -100,6 +100,14 @@
         return (yR - yL) / (2 * h);
     }
 
+    function derivative2At(x) {
+        var h = 1e-4;
+        var dL = derivativeAt(x - h);
+        var dR = derivativeAt(x + h);
+        if (isNaN(dL) || isNaN(dR)) return NaN;
+        return (dR - dL) / (2 * h);
+    }
+
     function hasSignFlip(a, b) {
         return (a > 0 && b < 0) || (a < 0 && b > 0);
     }
@@ -120,6 +128,23 @@
             }
         }
         return midX;
+    }
+
+    function refineInflectionPoint(leftX, rightX, leftD2, rightD2) {
+        for (var iter = 0; iter < 20; iter++) {
+            var midX = (leftX + rightX) / 2;
+            var midD2 = derivative2At(midX);
+            if (isNaN(midD2)) break;
+            if (Math.abs(midD2) < 1e-6) return midX;
+            if (hasSignFlip(leftD2, midD2)) {
+                rightX = midX;
+                rightD2 = midD2;
+            } else {
+                leftX = midX;
+                leftD2 = midD2;
+            }
+        }
+        return (leftX + rightX) / 2;
     }
 
     function findTurningPointBetween(fromX, toX) {
@@ -332,6 +357,24 @@
             }
         }
 
+        // Inflection points: f''(x) = 0, using the equation via derivative2At.
+        var d2Prev = null;
+        var xPrev = null;
+        for (var k = 0; k < xs.length; k++) {
+            var xk = xs[k];
+            var d2 = derivative2At(xk);
+            if (typeof d2 !== "number" || !isFinite(d2)) continue;
+            if (d2Prev !== null && xPrev !== null && hasSignFlip(d2Prev, d2)) {
+                var xRefined = refineInflectionPoint(xPrev, xk, d2Prev, d2);
+                var yRefined = getYAt(xRefined);
+                if (typeof yRefined === "number" && isFinite(yRefined)) {
+                    addCriticalPoint(points, xRefined, yRefined, "inflection");
+                }
+            }
+            d2Prev = d2;
+            xPrev = xk;
+        }
+
         // Detect sampled gaps that indicate a discontinuity between finite segments.
         for (var j = 0; j < xs.length - 1; j++) {
             var gap = Math.abs(xs[j + 1] - xs[j]);
@@ -344,9 +387,22 @@
         return points;
     }
 
+    function getCriticalPoints() {
+        var minList = [], maxList = [], infList = [];
+        for (var i = 0; i < criticalPoints.length; i++) {
+            var p = criticalPoints[i];
+            var pt = { x: p.x, y: p.y };
+            if (p.type === "min") minList.push(pt);
+            else if (p.type === "max") maxList.push(pt);
+            else if (p.type === "inflection") infList.push(pt);
+        }
+        return { minima: minList, maxima: maxList, inflection: infList };
+    }
+
     function criticalTypeLabel(type) {
         if (type === "max") return "local max";
         if (type === "min") return "local min";
+        if (type === "inflection") return "inflection";
         if (type === "edge") return "discontinuity edge";
         return "critical point";
     }
@@ -494,6 +550,7 @@
         get currentX() { return currentX; },
         get dataXY() { return dataXY; },
         get domain() { return domain; },
+        getCriticalPoints: getCriticalPoints,
         getFunctionLabel: getFunctionLabel,
         getDomain: getDomain,
         init: init,

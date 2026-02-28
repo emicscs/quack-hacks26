@@ -321,7 +321,15 @@
 
         if (options.clearMarks !== false) removePlotlyMarks(container);
 
-        var points = findCriticalPoints(data.x, data.y);
+        var points;
+        if (data.criticalPoints &&
+            Array.isArray(data.criticalPoints.minima) &&
+            Array.isArray(data.criticalPoints.maxima) &&
+            Array.isArray(data.criticalPoints.inflection)) {
+            points = data.criticalPoints;
+        } else {
+            points = findCriticalPoints(data.x, data.y);
+        }
 
         if (options.markPoints !== false) {
             if (!addPlotlyMarks(container, points, options) && options.onMarkPoints) {

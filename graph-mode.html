@@ -86,7 +86,10 @@
                 graphSelector: "#graph",
                 getData: function () {
                     var d = graphState.dataXY;
-                    return (d && d.x && d.y) ? { x: d.x.slice(), y: d.y.slice() } : null;
+                    if (!d || !d.x || !d.y) return null;
+                    var out = { x: d.x.slice(), y: d.y.slice() };
+                    if (graphState.getCriticalPoints) out.criticalPoints = graphState.getCriticalPoints();
+                    return out;
                 },
                 getCursorX: function () { return graphState.currentX; },
                 onCursorChange: function (x, y, isValid) { sonification.setFrequencyFromY(y, isValid); }
@@ -157,6 +160,7 @@
                 showError("");
                 var normalized = mathEngine.normalizeExpressionInput(text);
                 var paramNames = mathEngine.getParameterNames(text);
+                if (/sin\s*\(/i.test(normalized)) paramNames = [];
                 var newParams = {};
                 paramNames.forEach(function (n) {
                     newParams[n] = currentParams[n] != null ? currentParams[n] : 1;
