@@ -93,6 +93,7 @@
             var DEFAULT_MAX_SOUND_DURATION_MS = 500;
 
             var currentParams = {};
+            var currentMainExpr = "";
             var debounceTimer = null;
 
             var criticalPoints = window.CriticalPointDetector && CriticalPointDetector.integrate({
@@ -181,6 +182,7 @@
                 var paramsChanged = paramNames.join() !== Object.keys(currentParams).sort().join();
                 currentParams = newParams;
                 if (paramsChanged) buildSliders(paramNames);
+                currentMainExpr = normalized;
                 graphState.setFunction(normalized);
                 graphState.drawGraph();
                 graphState.updateCursorDisplay();
@@ -282,7 +284,7 @@
             var extraNextId = 0;
             var extraRowsContainer = document.getElementById("extra-expression-rows");
             var addExtraBtn = document.getElementById("add-expr-btn");
-            var EXTRA_CP_NAMES = ["Extra min", "Extra max", "Extra inflection"];
+            var EXTRA_CP_NAMES = ["Extra min", "Extra max", "Extra inflection", "Intersection"];
 
             function removeExtraTraces(graphDiv) {
                 if (!graphDiv || !Array.isArray(graphDiv.data)) return;
@@ -348,6 +350,50 @@
                         marker: { size: 12, color: "#3498db", symbol: "diamond", line: { color: "#1a1a1a", width: 1 } },
                         name: "Extra inflection"
                     });
+                }
+
+                // --- Intersection detection between all visible graph pairs ---
+                if (window.CriticalPointDetector && CriticalPointDetector.findIntersections) {
+                    var visibleFuncs = [];
+                    if (currentMainExpr) {
+                        visibleFuncs.push({ expr: currentMainExpr, params: currentParams });
+                    }
+                    extraEntries.forEach(function (e) {
+                        if (e.visible && e.expr) visibleFuncs.push({ expr: e.expr, params: e.params });
+                    });
+
+                    var allIx = [];
+                    for (var a = 0; a < visibleFuncs.length; a++) {
+                        for (var b = a + 1; b < visibleFuncs.length; b++) {
+                            var fA = visibleFuncs[a], fB = visibleFuncs[b];
+                            var evalA = (function (f) {
+                                return function (x) { return mathEngine.evaluate(f.expr, x, f.params); };
+                            })(fA);
+                            var evalB = (function (f) {
+                                return function (x) { return mathEngine.evaluate(f.expr, x, f.params); };
+                            })(fB);
+                            var ix = CriticalPointDetector.findIntersections(evalA, evalB, dom.min, dom.max, 0.05);
+                            allIx = allIx.concat(ix);
+                        }
+                    }
+
+                    if (allIx.length) {
+                        newTraces.push({
+                            x: allIx.map(function (p) { return p.x; }),
+                            y: allIx.map(function (p) { return p.y; }),
+                            mode: "markers+text", type: "scatter",
+                            marker: { size: 14, color: "#ff9800", symbol: "diamond-open", line: { color: "#ff9800", width: 2 } },
+                            text: allIx.map(function (p) { return "(" + p.x.toFixed(2) + ", " + p.y.toFixed(2) + ")"; }),
+                            textposition: "top center",
+                            textfont: { color: "#ff9800", size: 11 },
+                            hovertemplate: "Intersection<br>(%{x:.4f}, %{y:.4f})<extra></extra>",
+                            name: "Intersection"
+                        });
+                    }
+
+                    if (CriticalPointDetector.setIntersectionPoints) {
+                        CriticalPointDetector.setIntersectionPoints(allIx);
+                    }
                 }
 
                 if (newTraces.length > 0) Plotly.addTraces(graphDiv, newTraces);

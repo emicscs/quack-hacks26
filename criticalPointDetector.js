@@ -178,9 +178,48 @@
         var freqMin = Number.isFinite(options.freqMin) ? options.freqMin : 280;
         var freqMax = Number.isFinite(options.freqMax) ? options.freqMax : 520;
         var freqInf = Number.isFinite(options.freqInflection) ? options.freqInflection : 740;
+        var freqIx = Number.isFinite(options.freqIntersection) ? options.freqIntersection : 880;
+        var when = ctx.currentTime;
+
+        if (type === "intersection") {
+            var snareDur = 0.2;
+            var bufLen = Math.ceil(ctx.sampleRate * snareDur);
+            var noiseBuf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+            var nd = noiseBuf.getChannelData(0);
+            for (var s = 0; s < bufLen; s++) nd[s] = Math.random() * 2 - 1;
+            var noise = ctx.createBufferSource();
+            noise.buffer = noiseBuf;
+            var hpf = ctx.createBiquadFilter();
+            hpf.type = "highpass";
+            hpf.frequency.value = 2000;
+            var lpf = ctx.createBiquadFilter();
+            lpf.type = "lowpass";
+            lpf.frequency.value = 9000;
+            var nGain = ctx.createGain();
+            nGain.gain.setValueAtTime(0.9, when);
+            nGain.gain.exponentialRampToValueAtTime(0.001, when + snareDur);
+            noise.connect(hpf);
+            hpf.connect(lpf);
+            lpf.connect(nGain);
+            nGain.connect(ctx.destination);
+            var body = ctx.createOscillator();
+            body.type = "triangle";
+            body.frequency.setValueAtTime(180, when);
+            body.frequency.exponentialRampToValueAtTime(80, when + snareDur * 0.3);
+            var bGain = ctx.createGain();
+            bGain.gain.setValueAtTime(0.8, when);
+            bGain.gain.exponentialRampToValueAtTime(0.001, when + snareDur * 0.25);
+            body.connect(bGain);
+            bGain.connect(ctx.destination);
+            noise.start(when);
+            noise.stop(when + snareDur);
+            body.start(when);
+            body.stop(when + snareDur);
+            return;
+        }
+
         var freq = type === "min" ? freqMin : type === "max" ? freqMax : freqInf;
 
-        var when = ctx.currentTime;
         var osc = ctx.createOscillator();
         var osc2 = ctx.createOscillator();
         var g = ctx.createGain();
@@ -220,13 +259,25 @@
             pts.inflection.forEach(function (p) {
                 if (crossed(prev, x, p.x, tol)) playCrossingSound("inflection", options);
             });
+            if (pts.intersections) {
+                pts.intersections.forEach(function (p) {
+                    if (crossed(prev, x, p.x, tol)) playCrossingSound("intersection", options);
+                });
+            }
         }
         crossingState.lastCursorX = x;
     }
 
     function setCrossingPoints(points, initialCursorX) {
+        var prevIx = crossingState.points && crossingState.points.intersections;
         crossingState.points = points;
+        if (prevIx && !points.intersections) points.intersections = prevIx;
         crossingState.lastCursorX = isFiniteNumber(initialCursorX) ? initialCursorX : null;
+    }
+
+    function setIntersectionPoints(intersections) {
+        if (!crossingState.points) crossingState.points = { minima: [], maxima: [], inflection: [] };
+        crossingState.points.intersections = Array.isArray(intersections) ? intersections : [];
     }
 
     /**
@@ -394,8 +445,53 @@
         };
     }
 
+    /**
+     * Find intersection points between two functions using sampling + bisection.
+     * evalA(x) and evalB(x) return y-values. Returns [{x, y}, ...].
+     */
+    function findIntersections(evalA, evalB, xMin, xMax, step) {
+        step = step || 0.05;
+        var points = [];
+        var prevDiff = null;
+        var prevX = null;
+        for (var x = xMin; x <= xMax; x += step) {
+            var ya = evalA(x);
+            var yb = evalB(x);
+            if (!isFiniteNumber(ya) || !isFiniteNumber(yb)) {
+                prevDiff = null;
+                prevX = null;
+                continue;
+            }
+            var diff = ya - yb;
+            if (prevDiff !== null && prevDiff * diff < 0) {
+                var lo = prevX, hi = x;
+                for (var k = 0; k < 30; k++) {
+                    var mid = (lo + hi) / 2;
+                    var dMid = evalA(mid) - evalB(mid);
+                    if (!isFiniteNumber(dMid)) break;
+                    if ((evalA(lo) - evalB(lo)) * dMid < 0) hi = mid;
+                    else lo = mid;
+                }
+                var xi = (lo + hi) / 2;
+                var yi = (evalA(xi) + evalB(xi)) / 2;
+                if (isFiniteNumber(xi) && isFiniteNumber(yi)) {
+                    points.push({ x: xi, y: yi });
+                }
+            } else if (prevDiff !== null && Math.abs(diff) < 1e-10 && isFiniteNumber(ya)) {
+                if (points.length === 0 || Math.abs(points[points.length - 1].x - x) > step * 0.5) {
+                    points.push({ x: x, y: ya });
+                }
+            }
+            prevDiff = diff;
+            prevX = x;
+        }
+        return points;
+    }
+
     var CriticalPointDetector = {
         findCriticalPoints: findCriticalPoints,
+        findIntersections: findIntersections,
+        setIntersectionPoints: setIntersectionPoints,
         playTones: playTones,
         attach: attach,
         integrate: integrate,
