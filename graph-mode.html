@@ -26,6 +26,14 @@
             <a href="index.html" class="graph-mode-back" aria-label="Back to Audible Math home">← Back</a>
         </header>
 
+        <p class="instructions graph-mode-instructions">Adjust along the graph with <kbd>←</kbd>/<kbd>→</kbd> keys.</p>
+        <div class="graph-mode-graph-wrap">
+            <div id="graph" role="img" aria-label="Graph of function"></div>
+            <section aria-live="polite" aria-atomic="true" id="live-region" class="live-region">
+                Current: x = <span id="current-x">0</span>, y = <span id="current-y">0</span>
+            </section>
+        </div>
+
         <section aria-label="Expression entry" class="expression-entry graph-mode-card">
             <h2 class="graph-mode-card__title">Function</h2>
             <div class="expression-entry__row">
@@ -52,14 +60,6 @@
             </div>
             <div id="extra-expression-rows"></div>
         </section>
-
-        <p class="instructions graph-mode-instructions">Adjust along the graph with <kbd>←</kbd>/<kbd>→</kbd> keys.</p>
-        <div class="graph-mode-graph-wrap">
-            <div id="graph" role="img" aria-label="Graph of function"></div>
-            <section aria-live="polite" aria-atomic="true" id="live-region" class="live-region">
-                Current: x = <span id="current-x">0</span>, y = <span id="current-y">0</span>
-            </section>
-        </div>
 
         <section aria-label="Navigation settings" class="graph-mode-card">
             <h2 class="graph-mode-card__title">Navigation &amp; Sound</h2>

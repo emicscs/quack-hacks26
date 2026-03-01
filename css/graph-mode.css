@@ -1,9 +1,9 @@
 /* Graph Mode – UI revamp aligned with landing (Audible Math) */
 
 .graph-mode-page {
-  --graph-bg: #0d0f14;
-  --graph-bg-soft: #13161e;
-  --graph-bg-card: rgba(19, 22, 30, 0.85);
+  --graph-bg: #000000;
+  --graph-bg-soft: #0a0a0a;
+  --graph-bg-card: rgba(15, 15, 15, 0.95);
   --graph-fg: #edf2ff;
   --graph-fg-muted: rgba(237, 242, 255, 0.75);
   --graph-accent: #e8a84a;
@@ -12,7 +12,6 @@
   --graph-border: rgba(255, 255, 255, 0.06);
   --graph-font-title: "Syne", system-ui, sans-serif;
   --graph-font-body: "DM Sans", system-ui, sans-serif;
-  --graph-gif: url('../wave_bg.gif');
 }
 
 .graph-mode-page {
@@ -33,21 +32,8 @@
   width: 100vw;
   height: 100vh;
   min-height: 100%;
-  background-image: var(--graph-gif);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+  background: var(--graph-bg);
   z-index: 0;
-  pointer-events: none;
-}
-
-/* Fallback when GIF not present */
-.graph-mode-page .graph-mode-bg::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(232, 168, 74, 0.08) 0%, transparent 55%),
-    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(232, 168, 74, 0.05) 0%, transparent 50%);
   pointer-events: none;
 }
 
