@@ -456,11 +456,13 @@
                     '  <span class="expr-row__color" style="background:' + entry.color + '"></span>' +
                     '  <button type="button" class="expr-visibility-btn" title="Show/hide">\u25CF</button>' +
                     '  <input type="text" class="desmos-row__input" placeholder="e.g. x^2, cos(x)" autocomplete="off" spellcheck="false" />' +
+                    '  <button type="button" class="expr-row__swap" title="Swap with main function">\u21C4</button>' +
                     '  <button type="button" class="expr-row__delete" title="Remove">\u00D7</button>' +
                     '</div>';
 
                 var inputEl = row.querySelector(".desmos-row__input");
                 var visBtn = row.querySelector(".expr-visibility-btn");
+                var swapBtn = row.querySelector(".expr-row__swap");
                 var delBtn = row.querySelector(".expr-row__delete");
 
                 function syncVis() {
@@ -468,15 +470,18 @@
                     visBtn.style.color = entry.visible ? entry.color : "";
                 }
                 syncVis();
+                swapBtn.disabled = !entry.expr;
 
                 function flushInput() {
                     var val = inputEl.value.trim();
                     entry.input = val;
                     entry.expr = "";
+                    swapBtn.disabled = true;
                     if (!val) { refreshGraph(); return; }
                     var v = mathEngine.validate(val);
-                    if (!v.valid) { entry.expr = ""; refreshGraph(); return; }
+                    if (!v.valid) { refreshGraph(); return; }
                     entry.expr = mathEngine.normalizeExpressionInput(val);
+                    swapBtn.disabled = false;
                     refreshGraph();
                 }
 
@@ -494,6 +499,22 @@
                 inputEl.addEventListener("blur", flushInput);
                 inputEl.addEventListener("keydown", function (e) { if (e.key === "Enter") { flushInput(); inputEl.blur(); } });
                 visBtn.addEventListener("click", function () { entry.visible = !entry.visible; syncVis(); refreshGraph(); });
+                swapBtn.addEventListener("click", function () {
+                    var entryInput = entry.input;
+                    var entryExpr = entry.expr;
+                    var entryParams = Object.assign({}, entry.params);
+                    var prevMainInput = exprInput.value;
+                    var prevMainExpr = currentMainExpr;
+                    var prevMainParams = Object.assign({}, currentParams);
+                    entry.input = prevMainInput;
+                    entry.expr = prevMainExpr;
+                    entry.params = prevMainParams;
+                    inputEl.value = prevMainInput;
+                    exprInput.value = entryInput;
+                    currentParams = entryParams;
+                    renderLatex(exprInput.value);
+                    applyExpression(exprInput.value);
+                });
                 delBtn.addEventListener("click", function () {
                     extraEntries = extraEntries.filter(function (e) { return e.id !== entry.id; });
                     row.remove();

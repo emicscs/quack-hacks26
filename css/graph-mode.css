@@ -267,8 +267,13 @@
 }
 
 .graph-mode-page .expr-visibility-btn,
+.graph-mode-page .expr-row__swap,
 .graph-mode-page .expr-row__delete {
   color: var(--graph-fg-muted);
+}
+
+.graph-mode-page .expr-row__swap:hover {
+  color: var(--graph-accent);
 }
 
 .graph-mode-page .expr-row__delete:hover {
