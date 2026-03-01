@@ -625,16 +625,17 @@
             mode: "lines",
             type: "scatter",
             name: "f(x)",
+            line: { color: "#e8a84a", width: 2 },
             connectgaps: false,
             hovertemplate: "(%{x:.2f}, %{y:.2f})<extra></extra>"
         };
         var layout = {
-            paper_bgcolor: "#1a1a1a",
-            plot_bgcolor: "#252525",
-            font: { color: "#e8e8e8", size: 12 },
+            paper_bgcolor: "#0d0f14",
+            plot_bgcolor: "#13161e",
+            font: { color: "#edf2ff", size: 12 },
             hovermode: "closest",
-            xaxis: { title: "x", gridcolor: "#333", zerolinecolor: "#555", showspikes: false, range: [domain.min, domain.max] },
-            yaxis: { title: "y", gridcolor: "#333", zerolinecolor: "#555", showspikes: false },
+            xaxis: { title: "x", gridcolor: "rgba(255,255,255,0.06)", zerolinecolor: "rgba(232,168,74,0.35)", showspikes: false, range: [domain.min, domain.max] },
+            yaxis: { title: "y", gridcolor: "rgba(255,255,255,0.06)", zerolinecolor: "rgba(232,168,74,0.35)", showspikes: false },
             margin: { t: 40, r: 40, b: 50, l: 60 },
             showlegend: true,
             uirevision: "graph-mode"

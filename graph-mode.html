@@ -5,19 +5,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Graph Mode – Audible Math</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Syne:wght@500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/desmos.css">
+    <link rel="stylesheet" href="css/landing.css">
+    <link rel="stylesheet" href="css/graph-mode.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.0.0/math.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
 </head>
 
-<body>
-    <main role="main" aria-label="Graph mode – explore function with sound">
-        <h1>Graph Mode</h1>
+<body class="graph-mode-page">
+    <div class="graph-mode-bg" aria-hidden="true"></div>
+    <main role="main" aria-label="Graph mode – explore function with sound" class="graph-mode-main">
+        <header class="graph-mode-header">
+            <h1>Graph Mode</h1>
+            <a href="index.html" class="graph-mode-back" aria-label="Back to Audible Math home">← Back</a>
+        </header>
 
-        <section aria-label="Expression entry" class="expression-entry">
+        <section aria-label="Expression entry" class="expression-entry graph-mode-card">
+            <h2 class="graph-mode-card__title">Function</h2>
             <div class="expression-entry__row">
                 <input type="text" id="expr-input" class="desmos-row__input" placeholder="y = 2x^2 + 3, y = a sin(x), y = e^x" autocomplete="off" spellcheck="false" aria-label="Function expression" />
                 <select id="function-catalog" aria-describedby="catalog-desc" title="Quick examples">
@@ -35,7 +45,7 @@
             <span id="catalog-desc" class="visually-hidden">Choose a function to graph and sonify.</span>
         </section>
 
-        <section aria-label="Additional expressions" class="expression-list-section">
+        <section aria-label="Additional expressions" class="expression-list-section graph-mode-card">
             <div class="expression-list-header">
                 <span>Additional Functions</span>
                 <button type="button" id="add-expr-btn" class="add-expr-btn" title="Add another function">+ Add</button>
@@ -43,27 +53,35 @@
             <div id="extra-expression-rows"></div>
         </section>
 
-        <p class="instructions">Adjust along the graph with <kbd>←</kbd>/<kbd>→</kbd> keys.</p>
-        <div id="graph" role="img" aria-label="Graph of function"></div>
+        <p class="instructions graph-mode-instructions">Adjust along the graph with <kbd>←</kbd>/<kbd>→</kbd> keys.</p>
+        <div class="graph-mode-graph-wrap">
+            <div id="graph" role="img" aria-label="Graph of function"></div>
+            <section aria-live="polite" aria-atomic="true" id="live-region" class="live-region">
+                Current: x = <span id="current-x">0</span>, y = <span id="current-y">0</span>
+            </section>
+        </div>
 
-        <section aria-live="polite" aria-atomic="true" id="live-region" class="live-region">
-            Current: x = <span id="current-x">0</span>, y = <span id="current-y">0</span>
+        <section aria-label="Navigation settings" class="graph-mode-card">
+            <h2 class="graph-mode-card__title">Navigation &amp; Sound</h2>
+            <div class="graph-mode-settings">
+                <div class="graph-mode-setting">
+                    <label for="step-size-input">Step size</label>
+                    <input id="step-size-input" type="number" min="0.1" step="0.1" value="1" inputmode="decimal">
+                </div>
+                <div class="graph-mode-setting">
+                    <label for="max-sound-duration-input">Max sound duration (s)</label>
+                    <input id="max-sound-duration-input" type="number" min="0.1" step="0.1" value="0.5" inputmode="decimal">
+                </div>
+                <p class="graph-mode-setting-full">Step interval: <span id="buffer-seconds">0.2</span>s (adjust with <kbd>↑</kbd>/<kbd>↓</kbd> keys)</p>
+                <label for="stop-critical-toggle" class="graph-mode-setting-full graph-mode-setting-check">
+                    <input id="stop-critical-toggle" type="checkbox">
+                    Stop at critical points
+                </label>
+            </div>
         </section>
 
-        <section aria-label="Navigation settings">
-            <label for="step-size-input">Step size</label>
-            <input id="step-size-input" type="number" min="0.1" step="0.1" value="1" inputmode="decimal">
-            <label for="max-sound-duration-input">Max sound duration (s)</label>
-            <input id="max-sound-duration-input" type="number" min="0.1" step="0.1" value="0.5" inputmode="decimal">
-            <p>Step interval: <span id="buffer-seconds">0.2</span>s (adjust with <kbd>↑</kbd>/<kbd>↓</kbd> keys)</p>
-            <label for="stop-critical-toggle">
-                <input id="stop-critical-toggle" type="checkbox">
-                Stop at critical points
-            </label>
-        </section>
-
-        <section aria-label="Sound directory" class="sound-directory">
-            <h2 class="sound-directory__title">Sound Directory</h2>
+        <section aria-label="Sound directory" class="sound-directory graph-mode-card">
+            <h2 class="sound-directory__title graph-mode-card__title">Sound Directory</h2>
             <p class="sound-directory__desc">Preview the sounds used for each point type:</p>
             <div class="sound-directory__buttons">
                 <button type="button" class="sound-btn sound-btn--min" data-sound="min">
