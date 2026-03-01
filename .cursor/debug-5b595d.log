@@ -1,0 +1,3 @@
+{"sessionId":"5b595d","location":"graph-mode.html:beforeInit","message":"about to call graphState.init()","data":{},"hypothesisId":"B","timestamp":1772333779578}
+{"sessionId":"5b595d","location":"graph-mode.html:beforeAddExtraBtn","message":"before addExtraBtn.addEventListener","data":{"addExtraBtnNull":true,"extraRowsContainerNull":true},"hypothesisId":"A","timestamp":1772333779577}
+{"sessionId":"5b595d","location":"graph-state.js:init","message":"init() entered","data":{},"hypothesisId":"B","timestamp":1772333779578}
