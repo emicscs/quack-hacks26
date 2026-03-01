@@ -126,6 +126,83 @@
         return out;
     }
 
+    function playCriticalCue(ctx, type, when, duration, gainValue) {
+        if (type === "max") {
+            var bellGain = ctx.createGain();
+            var bellMain = ctx.createOscillator();
+            var bellOver = ctx.createOscillator();
+            bellMain.type = "sine";
+            bellOver.type = "triangle";
+            bellMain.frequency.setValueAtTime(980, when);
+            bellOver.frequency.setValueAtTime(1480, when);
+            bellGain.gain.setValueAtTime(gainValue, when);
+            bellGain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+            bellMain.connect(bellGain);
+            bellOver.connect(bellGain);
+            bellGain.connect(ctx.destination);
+            bellMain.start(when);
+            bellOver.start(when);
+            bellMain.stop(when + duration);
+            bellOver.stop(when + duration);
+            return;
+        }
+
+        if (type === "min") {
+            var gongGain = ctx.createGain();
+            var gongMain = ctx.createOscillator();
+            var gongLow = ctx.createOscillator();
+            gongMain.type = "triangle";
+            gongLow.type = "sine";
+            gongMain.frequency.setValueAtTime(170, when);
+            gongMain.frequency.exponentialRampToValueAtTime(120, when + duration * 0.9);
+            gongLow.frequency.setValueAtTime(85, when);
+            gongLow.frequency.exponentialRampToValueAtTime(60, when + duration * 0.9);
+            gongGain.gain.setValueAtTime(gainValue, when);
+            gongGain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+            gongMain.connect(gongGain);
+            gongLow.connect(gongGain);
+            gongGain.connect(ctx.destination);
+            gongMain.start(when);
+            gongLow.start(when);
+            gongMain.stop(when + duration);
+            gongLow.stop(when + duration);
+            return;
+        }
+
+        // Inflection cue: short snare-style hit (noise + low body tone).
+        var noiseDuration = Math.max(0.06, Math.min(duration, 0.16));
+        var bufferSize = Math.max(1, Math.floor(ctx.sampleRate * noiseDuration));
+        var noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        var noiseData = noiseBuffer.getChannelData(0);
+        for (var i = 0; i < bufferSize; i++) noiseData[i] = Math.random() * 2 - 1;
+        var noise = ctx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        var snareFilter = ctx.createBiquadFilter();
+        snareFilter.type = "bandpass";
+        snareFilter.frequency.setValueAtTime(1800, when);
+        snareFilter.Q.setValueAtTime(0.8, when);
+        var noiseGain = ctx.createGain();
+        noiseGain.gain.setValueAtTime(Math.min(0.18, gainValue), when);
+        noiseGain.gain.exponentialRampToValueAtTime(0.0001, when + noiseDuration);
+        noise.connect(snareFilter);
+        snareFilter.connect(noiseGain);
+        noiseGain.connect(ctx.destination);
+
+        var body = ctx.createOscillator();
+        var bodyGain = ctx.createGain();
+        body.type = "triangle";
+        body.frequency.setValueAtTime(185, when);
+        body.frequency.exponentialRampToValueAtTime(130, when + noiseDuration * 0.9);
+        bodyGain.gain.setValueAtTime(Math.min(0.08, gainValue * 0.5), when);
+        bodyGain.gain.exponentialRampToValueAtTime(0.0001, when + noiseDuration * 0.9);
+        body.connect(bodyGain);
+        bodyGain.connect(ctx.destination);
+        noise.start(when);
+        noise.stop(when + noiseDuration);
+        body.start(when);
+        body.stop(when + noiseDuration * 0.9);
+    }
+
     function playTones(points, options) {
         if (!AudioContext) return;
         options = options || {};
@@ -136,29 +213,14 @@
         }
         if (ctx.state === "suspended") ctx.resume();
 
-        var duration = Number.isFinite(options.beepDuration) ? options.beepDuration : 0.12;
+        var duration = Number.isFinite(options.beepDuration) ? options.beepDuration : 0.16;
         var gap = Number.isFinite(options.beepGap) ? options.beepGap : 0.08;
-        var freqMin = Number.isFinite(options.freqMin) ? options.freqMin : 280;
-        var freqMax = Number.isFinite(options.freqMax) ? options.freqMax : 520;
-        var freqInf = Number.isFinite(options.freqInflection) ? options.freqInflection : 740;
-
-        function beep(freq, when) {
-            var osc = ctx.createOscillator();
-            var gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.type = "sine";
-            osc.frequency.setValueAtTime(freq, when);
-            gain.gain.setValueAtTime(0.15, when);
-            gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
-            osc.start(when);
-            osc.stop(when + duration);
-        }
+        var cueGain = Number.isFinite(options.cueGain) ? options.cueGain : 0.16;
 
         var t = ctx.currentTime;
-        points.minima.forEach(function () { beep(freqMin, t); t += duration + gap; });
-        points.maxima.forEach(function () { beep(freqMax, t); t += duration + gap; });
-        points.inflection.forEach(function () { beep(freqInf, t); t += duration + gap; });
+        points.minima.forEach(function () { playCriticalCue(ctx, "min", t, duration, cueGain); t += duration + gap; });
+        points.maxima.forEach(function () { playCriticalCue(ctx, "max", t, duration, cueGain); t += duration + gap; });
+        points.inflection.forEach(function () { playCriticalCue(ctx, "inflection", t, duration, cueGain); t += duration + gap; });
     }
 
     var crossingState = { lastCursorX: null, points: null, audioContext: null, xTolerance: 0.06 };
@@ -173,30 +235,9 @@
         }
         if (ctx.state === "suspended") ctx.resume();
 
-        var duration = Number.isFinite(options.crossingDuration) ? options.crossingDuration : 0.28;
-        var gain = Number.isFinite(options.crossingGain) ? options.crossingGain : 0.4;
-        var freqMin = Number.isFinite(options.freqMin) ? options.freqMin : 280;
-        var freqMax = Number.isFinite(options.freqMax) ? options.freqMax : 520;
-        var freqInf = Number.isFinite(options.freqInflection) ? options.freqInflection : 740;
-        var freq = type === "min" ? freqMin : type === "max" ? freqMax : freqInf;
-
-        var when = ctx.currentTime;
-        var osc = ctx.createOscillator();
-        var osc2 = ctx.createOscillator();
-        var g = ctx.createGain();
-        osc.connect(g);
-        osc2.connect(g);
-        g.connect(ctx.destination);
-        osc.type = "square";
-        osc2.type = "sine";
-        osc.frequency.setValueAtTime(freq, when);
-        osc2.frequency.setValueAtTime(freq * 1.2, when);
-        g.gain.setValueAtTime(gain, when);
-        g.gain.exponentialRampToValueAtTime(0.001, when + duration);
-        osc.start(when);
-        osc2.start(when);
-        osc.stop(when + duration);
-        osc2.stop(when + duration);
+        var duration = Number.isFinite(options.crossingDuration) ? options.crossingDuration : 0.24;
+        var gain = Number.isFinite(options.crossingGain) ? options.crossingGain : 0.2;
+        playCriticalCue(ctx, type, ctx.currentTime, duration, gain);
     }
 
     function crossed(prev, curr, pointX, tol) {
