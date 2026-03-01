@@ -44,6 +44,8 @@
         <section aria-label="Navigation settings">
             <label for="step-size-input">Step size</label>
             <input id="step-size-input" type="number" min="0.1" step="0.1" value="1" inputmode="decimal">
+            <label for="max-sound-duration-input">Max sound duration (s)</label>
+            <input id="max-sound-duration-input" type="number" min="0.1" step="0.1" value="0.5" inputmode="decimal">
             <p>Step interval: <span id="buffer-seconds">0.2</span>s</p>
             <label for="stop-critical-toggle">
                 <input id="stop-critical-toggle" type="checkbox">
@@ -72,12 +74,14 @@
             var exprSliders = document.getElementById("expr-sliders");
             var focusRegion = document.getElementById("keyboard-focus-region");
             var stepInput = document.getElementById("step-size-input");
+            var maxSoundDurationInput = document.getElementById("max-sound-duration-input");
             var bufferEl = document.getElementById("buffer-seconds");
             var stopCriticalToggle = document.getElementById("stop-critical-toggle");
             var graphState = window.AudibleMath.graphState;
             var mathEngine = window.AudibleMath.mathEngine;
             var sonification = window.AudibleMath.sonification;
             var voiceIntro = window.AudibleMath.voiceIntro;
+            var DEFAULT_MAX_SOUND_DURATION_MS = 500;
 
             var currentParams = {};
             var debounceTimer = null;
@@ -209,10 +213,28 @@
                 sonification.setFrequencyFromY(y, isValid);
             };
 
+            function formatDurationSeconds(ms) {
+                return (ms / 1000).toFixed(1);
+            }
+
+            function applyMaxSoundDurationFromInput() {
+                if (!maxSoundDurationInput || !sonification || !sonification.setMaxPlaybackMs) return;
+                var seconds = parseFloat(maxSoundDurationInput.value);
+                if (!isFinite(seconds) || seconds <= 0) {
+                    maxSoundDurationInput.value = formatDurationSeconds(sonification.getMaxPlaybackMs ? sonification.getMaxPlaybackMs() : DEFAULT_MAX_SOUND_DURATION_MS);
+                    return;
+                }
+                var appliedMs = sonification.setMaxPlaybackMs(seconds * 1000);
+                maxSoundDurationInput.value = formatDurationSeconds(appliedMs);
+            }
+
             function updateSettingsUi(stepSize, repeatDelayMs, shouldStopAtCritical) {
                 if (stepInput) stepInput.value = String(stepSize);
                 if (bufferEl) bufferEl.textContent = (repeatDelayMs / 1000).toFixed(1);
                 if (stopCriticalToggle) stopCriticalToggle.checked = !!shouldStopAtCritical;
+                if (maxSoundDurationInput && sonification && sonification.getMaxPlaybackMs) {
+                    maxSoundDurationInput.value = formatDurationSeconds(sonification.getMaxPlaybackMs());
+                }
             }
 
             graphState.onSettingsChange = function (stepSize, repeatDelayMs, shouldStopAtCritical) {
@@ -227,12 +249,23 @@
                     if (!graphState.setCursorStep(stepInput.value)) stepInput.value = String(graphState.getCursorStep());
                 });
             }
+            if (maxSoundDurationInput) {
+                maxSoundDurationInput.addEventListener("change", applyMaxSoundDurationFromInput);
+                maxSoundDurationInput.addEventListener("blur", applyMaxSoundDurationFromInput);
+            }
             if (stopCriticalToggle) {
                 stopCriticalToggle.addEventListener("change", function () {
                     graphState.setStopAtCriticalPoints(stopCriticalToggle.checked);
                 });
             }
 
+            if (sonification && sonification.setMaxPlaybackMs) {
+                var initialDurationSeconds = maxSoundDurationInput ? parseFloat(maxSoundDurationInput.value) : NaN;
+                var initialDurationMs = isFinite(initialDurationSeconds) && initialDurationSeconds > 0
+                    ? initialDurationSeconds * 1000
+                    : DEFAULT_MAX_SOUND_DURATION_MS;
+                sonification.setMaxPlaybackMs(initialDurationMs);
+            }
             graphState.init();
             exprInput.value = "y = sin(x)";
             renderLatex(exprInput.value);

@@ -272,9 +272,9 @@
         if (typeof Plotly === "undefined") return;
         var graphDiv = document.getElementById("graph");
         if (!graphDiv || !graphDiv.data) return;
-        // Hover moves the x guide line again.
-        var x = hoverPoint ? hoverPoint.x : currentX;
-        var y = hoverPoint ? hoverPoint.y : getYAt(currentX);
+        // Keep guides/label anchored to keyboard graph coordinate, not mouse hover.
+        var x = currentX;
+        var y = getYAt(currentX);
         var shapes = [{
             type: "line",
             x0: x,
@@ -296,7 +296,26 @@
                 line: { color: "#4a9eff", width: 1.5, dash: "dot" }
             });
         }
-        Plotly.relayout(graphDiv, { shapes: shapes });
+        var annotations = [];
+        if (typeof y === "number" && isFinite(y)) {
+            annotations.push({
+                x: x,
+                y: y,
+                xref: "x",
+                yref: "y",
+                text: "(" + x.toFixed(2) + ", " + y.toFixed(2) + ")",
+                showarrow: false,
+                xanchor: "left",
+                yanchor: "bottom",
+                xshift: 8,
+                yshift: 8,
+                font: { color: "#4a9eff", size: 12 },
+                bgcolor: "rgba(26,26,26,0.8)",
+                bordercolor: "#4a9eff",
+                borderwidth: 1
+            });
+        }
+        Plotly.relayout(graphDiv, { shapes: shapes, annotations: annotations });
     }
 
     function bindHoverTracking(graphDiv) {
