@@ -17,10 +17,10 @@
     <main role="main" aria-label="Graph mode – explore function with sound">
         <h1>Graph Mode</h1>
 
-        <section aria-label="Expression entry" class="expression-entry">
-            <div class="expression-entry__row">
-                <input type="text" id="expr-input" class="desmos-row__input" placeholder="y = 2x^2 + 3, y = a sin(x), y = e^x" autocomplete="off" spellcheck="false" aria-label="Function expression" />
-                <select id="function-catalog" aria-describedby="catalog-desc" title="Quick examples">
+        <section aria-label="Expressions" class="expressions-section">
+            <div class="expressions-header">
+                <span class="expressions-header__label">Expressions</span>
+                <select id="function-catalog" title="Quick examples">
                     <option value="">Examples...</option>
                     <option value="sin(x)">sin(x)</option>
                     <option value="x^2">x²</option>
@@ -28,11 +28,9 @@
                     <option value="sqrt(x)">√x</option>
                     <option value="e^x">eˣ</option>
                 </select>
+                <button type="button" id="add-expr-btn" class="add-expr-btn" aria-label="Add expression">+ Add</button>
             </div>
-            <div id="expr-preview" class="desmos-row__preview desmos-row__preview--empty"></div>
-            <div id="expr-error" class="desmos-row__error" style="display:none" role="alert"></div>
-            <div id="expr-sliders" class="desmos-row__sliders"></div>
-            <span id="catalog-desc" class="visually-hidden">Choose a function to graph and sonify.</span>
+            <div id="expr-rows" class="expr-rows"></div>
         </section>
 
         <div id="graph" role="img" aria-label="Graph of function"></div>
@@ -66,10 +64,8 @@
     <script>
         (function initGraphMode() {
             var catalog = document.getElementById("function-catalog");
-            var exprInput = document.getElementById("expr-input");
-            var exprPreview = document.getElementById("expr-preview");
-            var exprError = document.getElementById("expr-error");
-            var exprSliders = document.getElementById("expr-sliders");
+            var addBtn = document.getElementById("add-expr-btn");
+            var rowsContainer = document.getElementById("expr-rows");
             var focusRegion = document.getElementById("keyboard-focus-region");
             var stepInput = document.getElementById("step-size-input");
             var bufferEl = document.getElementById("buffer-seconds");
@@ -79,8 +75,446 @@
             var sonification = window.AudibleMath.sonification;
             var voiceIntro = window.AudibleMath.voiceIntro;
 
-            var currentParams = {};
-            var debounceTimer = null;
+            var COLORS = ["#4a9eff", "#e74c3c", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c", "#e91e63", "#00bcd4"];
+            var nextId = 0;
+            var expressions = [];
+            var debounceTimers = {};
+
+            // ── Expression list management ──
+
+            function addExpression(initialInput) {
+                var id = "e" + (nextId++);
+                var item = {
+                    id: id,
+                    input: initialInput || "",
+                    expr: "",
+                    params: {},
+                    paramNames: [],
+                    visible: true,
+                    color: COLORS[expressions.length % COLORS.length],
+                    error: ""
+                };
+                expressions.push(item);
+                revalidate(item);
+                createRowDom(item);
+                renderGraph();
+                return id;
+            }
+
+            function removeExpression(id) {
+                expressions = expressions.filter(function (e) { return e.id !== id; });
+                var el = rowsContainer.querySelector("[data-id=\"" + id + "\"]");
+                if (el) el.remove();
+                renderGraph();
+            }
+
+            function revalidate(item) {
+                var text = (item.input || "").trim();
+                item.error = "";
+                item.expr = "";
+                item.paramNames = [];
+                if (!text) { item.error = "Enter an expression"; return; }
+                var v = mathEngine.validate(text);
+                if (!v.valid) { item.error = v.error || "Invalid expression"; return; }
+                item.expr = mathEngine.normalizeExpressionInput(text);
+                item.paramNames = mathEngine.getParameterNames(text);
+                var prev = item.params || {};
+                item.params = {};
+                item.paramNames.forEach(function (n) {
+                    item.params[n] = prev[n] != null ? prev[n] : 1;
+                });
+            }
+
+            function getVisible() {
+                return expressions.filter(function (e) { return e.visible && e.expr; });
+            }
+
+            // ── Row DOM ──
+
+            function renderLatex(text, el) {
+                if (!el) return;
+                var latex = mathEngine.toTex(text);
+                if (typeof katex !== "undefined" && latex) {
+                    try {
+                        el.innerHTML = katex.renderToString(latex, { throwOnError: false, displayMode: false });
+                        el.classList.remove("desmos-row__preview--empty", "desmos-row__preview--error");
+                    } catch (e) { el.textContent = latex; }
+                } else {
+                    el.textContent = latex || "";
+                    el.classList.toggle("desmos-row__preview--empty", !latex);
+                }
+            }
+
+            function createRowDom(item) {
+                var row = document.createElement("div");
+                row.className = "expr-row";
+                row.dataset.id = item.id;
+                row.innerHTML =
+                    "<div class=\"expr-row__header\">" +
+                    "  <button type=\"button\" class=\"expr-visibility-btn\" title=\"Show/hide\">\u25CF</button>" +
+                    "  <span class=\"expr-row__color\" style=\"background:" + item.color + "\"></span>" +
+                    "  <input type=\"text\" class=\"expr-row__input\" placeholder=\"y = ...\" value=\"" + (item.input || "").replace(/"/g, "&quot;") + "\" autocomplete=\"off\" spellcheck=\"false\" />" +
+                    "  <button type=\"button\" class=\"expr-row__delete\" title=\"Remove\">\u00D7</button>" +
+                    "</div>" +
+                    "<div class=\"expr-row__preview desmos-row__preview--empty\"></div>" +
+                    "<div class=\"expr-row__error\" style=\"display:none\"></div>" +
+                    "<div class=\"expr-row__sliders\"></div>";
+
+                var inputEl = row.querySelector(".expr-row__input");
+                var previewEl = row.querySelector(".expr-row__preview");
+                var errorEl = row.querySelector(".expr-row__error");
+                var slidersEl = row.querySelector(".expr-row__sliders");
+                var visBtn = row.querySelector(".expr-visibility-btn");
+                var delBtn = row.querySelector(".expr-row__delete");
+
+                function syncUi() {
+                    visBtn.textContent = item.visible ? "\u25CF" : "\u25CB";
+                    visBtn.style.color = item.visible ? item.color : "";
+                    visBtn.classList.toggle("expr-visibility-btn--off", !item.visible);
+                    row.classList.toggle("expr-row--error", !!item.error);
+                    row.classList.toggle("expr-row--hidden", !item.visible);
+                    errorEl.textContent = item.error || "";
+                    errorEl.style.display = item.error ? "block" : "none";
+                    renderLatex(item.input, previewEl);
+                    buildSliders(item, slidersEl);
+                }
+
+                function flush() {
+                    var val = inputEl.value.trim();
+                    if (val === item.input) return;
+                    item.input = val;
+                    revalidate(item);
+                    syncUi();
+                    renderGraph();
+                }
+
+                function schedule() {
+                    if (debounceTimers[item.id]) clearTimeout(debounceTimers[item.id]);
+                    debounceTimers[item.id] = setTimeout(function () {
+                        debounceTimers[item.id] = null;
+                        flush();
+                    }, 120);
+                }
+
+                inputEl.addEventListener("input", function () {
+                    renderLatex(this.value, previewEl);
+                    row.classList.remove("expr-row--error");
+                    errorEl.style.display = "none";
+                    schedule();
+                });
+                inputEl.addEventListener("blur", flush);
+                inputEl.addEventListener("keydown", function (e) {
+                    if (e.key === "Enter") { flush(); inputEl.blur(); }
+                });
+
+                visBtn.addEventListener("click", function () {
+                    item.visible = !item.visible;
+                    syncUi();
+                    renderGraph();
+                });
+
+                delBtn.addEventListener("click", function () {
+                    removeExpression(item.id);
+                });
+
+                syncUi();
+                rowsContainer.appendChild(row);
+                return row;
+            }
+
+            function buildSliders(item, container) {
+                if (!container) return;
+                container.innerHTML = "";
+                if (!item.paramNames || !item.paramNames.length) return;
+                item.paramNames.forEach(function (name) {
+                    var wrap = document.createElement("div");
+                    wrap.className = "desmos-row__slider-wrap";
+                    var label = document.createElement("label");
+                    label.textContent = name + ":";
+                    var slider = document.createElement("input");
+                    slider.type = "range";
+                    slider.className = "desmos-row__slider";
+                    slider.min = -10; slider.max = 10; slider.step = 0.1;
+                    slider.value = item.params[name] != null ? item.params[name] : 1;
+                    var span = document.createElement("span");
+                    span.className = "desmos-row__slider-value";
+                    span.textContent = slider.value;
+                    slider.addEventListener("input", function () {
+                        var v = parseFloat(this.value);
+                        span.textContent = Number.isInteger(v) ? v : v.toFixed(2);
+                        item.params[name] = v;
+                        renderGraph();
+                    });
+                    wrap.appendChild(label);
+                    wrap.appendChild(slider);
+                    wrap.appendChild(span);
+                    container.appendChild(wrap);
+                });
+            }
+
+            // ── Critical points for a single expression ──
+
+            function evalExpr(expr, x, params) {
+                return mathEngine.evaluate(expr, x, params);
+            }
+
+            function derivativeOf(expr, x, params) {
+                var h = 1e-4;
+                var yL = evalExpr(expr, x - h, params);
+                var yR = evalExpr(expr, x + h, params);
+                if (isNaN(yL) || isNaN(yR)) return NaN;
+                return (yR - yL) / (2 * h);
+            }
+
+            function derivative2Of(expr, x, params) {
+                var h = 1e-4;
+                var dL = derivativeOf(expr, x - h, params);
+                var dR = derivativeOf(expr, x + h, params);
+                if (isNaN(dL) || isNaN(dR)) return NaN;
+                return (dR - dL) / (2 * h);
+            }
+
+            function signFlip(a, b) {
+                return (a > 0 && b < 0) || (a < 0 && b > 0);
+            }
+
+            function refineTurning(expr, params, lx, rx, ld, rd) {
+                for (var i = 0; i < 20; i++) {
+                    var mx = (lx + rx) / 2;
+                    var md = derivativeOf(expr, mx, params);
+                    if (isNaN(md) || Math.abs(md) < 1e-4) return mx;
+                    if (signFlip(ld, md)) { rx = mx; rd = md; }
+                    else { lx = mx; ld = md; }
+                }
+                return (lx + rx) / 2;
+            }
+
+            function refineInflection(expr, params, lx, rx, ld2, rd2) {
+                for (var i = 0; i < 20; i++) {
+                    var mx = (lx + rx) / 2;
+                    var md2 = derivative2Of(expr, mx, params);
+                    if (isNaN(md2) || Math.abs(md2) < 1e-6) return mx;
+                    if (signFlip(ld2, md2)) { rx = mx; } else { lx = mx; }
+                }
+                return (lx + rx) / 2;
+            }
+
+            function computeCriticalPoints(expr, params, domain, step) {
+                var pts = [];
+                var data = mathEngine.sample(expr, domain.min, domain.max, step, params);
+                var xs = data.x, ys = data.y;
+                if (xs.length < 3) return pts;
+                var eps = 1e-6;
+
+                for (var i = 1; i < ys.length - 1; i++) {
+                    var dp = ys[i] - ys[i - 1], dn = ys[i + 1] - ys[i];
+                    var ps = dp > eps ? 1 : (dp < -eps ? -1 : 0);
+                    var ns = dn > eps ? 1 : (dn < -eps ? -1 : 0);
+                    if (ps > 0 && ns < 0) {
+                        var ld = derivativeOf(expr, xs[i - 1], params), rd = derivativeOf(expr, xs[i + 1], params);
+                        var rx = refineTurning(expr, params, xs[i - 1], xs[i + 1], ld, rd);
+                        var ry = evalExpr(expr, rx, params);
+                        if (isFinite(ry)) pts.push({ x: rx, y: ry, type: "max" });
+                    } else if (ps < 0 && ns > 0) {
+                        var ld = derivativeOf(expr, xs[i - 1], params), rd = derivativeOf(expr, xs[i + 1], params);
+                        var rx = refineTurning(expr, params, xs[i - 1], xs[i + 1], ld, rd);
+                        var ry = evalExpr(expr, rx, params);
+                        if (isFinite(ry)) pts.push({ x: rx, y: ry, type: "min" });
+                    }
+                }
+
+                var d2Prev = null, xPrev = null;
+                for (var k = 0; k < xs.length; k++) {
+                    var d2 = derivative2Of(expr, xs[k], params);
+                    if (!isFinite(d2)) { d2Prev = null; xPrev = null; continue; }
+                    if (d2Prev !== null && signFlip(d2Prev, d2)) {
+                        var ix = refineInflection(expr, params, xPrev, xs[k], d2Prev, d2);
+                        var iy = evalExpr(expr, ix, params);
+                        if (isFinite(iy)) pts.push({ x: ix, y: iy, type: "inflection" });
+                    }
+                    d2Prev = d2;
+                    xPrev = xs[k];
+                }
+
+                return pts;
+            }
+
+            // ── Intersection detection ──
+
+            function findIntersections(exprA, paramsA, exprB, paramsB, domain, step) {
+                var pts = [];
+                var xMin = domain.min, xMax = domain.max;
+                var prevX = xMin;
+                var prevDiff = evalExpr(exprA, xMin, paramsA) - evalExpr(exprB, xMin, paramsB);
+
+                for (var xi = xMin + step; xi <= xMax; xi += step) {
+                    var yA = evalExpr(exprA, xi, paramsA);
+                    var yB = evalExpr(exprB, xi, paramsB);
+                    if (!isFinite(yA) || !isFinite(yB)) { prevDiff = NaN; prevX = xi; continue; }
+                    var diff = yA - yB;
+                    if (isFinite(prevDiff) && (signFlip(prevDiff, diff) || Math.abs(diff) < 1e-8)) {
+                        var lx = prevX, rx = xi, ld = prevDiff, rd = diff;
+                        for (var it = 0; it < 30; it++) {
+                            var mx = (lx + rx) / 2;
+                            var md = evalExpr(exprA, mx, paramsA) - evalExpr(exprB, mx, paramsB);
+                            if (!isFinite(md)) break;
+                            if (Math.abs(md) < 1e-8) { lx = rx = mx; break; }
+                            if (signFlip(ld, md)) { rx = mx; rd = md; }
+                            else { lx = mx; ld = md; }
+                        }
+                        var ix = (lx + rx) / 2;
+                        var iy = evalExpr(exprA, ix, paramsA);
+                        if (isFinite(iy)) {
+                            var dup = false;
+                            for (var p = 0; p < pts.length; p++) {
+                                if (Math.abs(pts[p].x - ix) < step * 0.5) { dup = true; break; }
+                            }
+                            if (!dup) pts.push({ x: ix, y: iy });
+                        }
+                    }
+                    prevDiff = diff;
+                    prevX = xi;
+                }
+                return pts;
+            }
+
+            // ── Graph rendering ──
+
+            var STEP = 0.1;
+            var DOMAIN = { min: -2 * Math.PI, max: 2 * Math.PI };
+
+            function critLabel(type) {
+                if (type === "max") return "local max";
+                if (type === "min") return "local min";
+                if (type === "inflection") return "inflection";
+                return "critical";
+            }
+
+            function critSymbol(type) {
+                if (type === "max") return "triangle-up";
+                if (type === "min") return "triangle-down";
+                if (type === "inflection") return "diamond";
+                return "circle-open";
+            }
+
+            function renderGraph() {
+                if (typeof Plotly === "undefined") return;
+                var graphDiv = document.getElementById("graph");
+                if (!graphDiv) return;
+
+                var visible = getVisible();
+                var traces = [];
+
+                visible.forEach(function (item) {
+                    var data = mathEngine.sample(item.expr, DOMAIN.min, DOMAIN.max, STEP, item.params);
+                    traces.push({
+                        x: data.x,
+                        y: data.y,
+                        mode: "lines",
+                        type: "scatter",
+                        name: item.input || item.expr,
+                        line: { color: item.color, width: 2 },
+                        connectgaps: false,
+                        hovertemplate: "(%{x:.2f}, %{y:.2f})<extra>" + (item.input || item.expr) + "</extra>"
+                    });
+
+                    var crits = computeCriticalPoints(item.expr, item.params, DOMAIN, STEP);
+                    if (crits.length) {
+                        traces.push({
+                            x: crits.map(function (p) { return p.x; }),
+                            y: crits.map(function (p) { return p.y; }),
+                            mode: "markers",
+                            type: "scatter",
+                            name: "critical (" + (item.input || item.expr) + ")",
+                            marker: {
+                                color: item.color,
+                                size: 9,
+                                symbol: crits.map(function (p) { return critSymbol(p.type); }),
+                                line: { color: "#fff", width: 1 }
+                            },
+                            customdata: crits.map(function (p) { return critLabel(p.type); }),
+                            hovertemplate: "(%{x:.2f}, %{y:.2f})<br>%{customdata}<extra></extra>",
+                            showlegend: false
+                        });
+                    }
+                });
+
+                // Intersection points between all pairs of visible expressions
+                var allIntersections = [];
+                for (var i = 0; i < visible.length; i++) {
+                    for (var j = i + 1; j < visible.length; j++) {
+                        var ints = findIntersections(
+                            visible[i].expr, visible[i].params,
+                            visible[j].expr, visible[j].params,
+                            DOMAIN, STEP
+                        );
+                        ints.forEach(function (p) {
+                            p.labelA = visible[i].input || visible[i].expr;
+                            p.labelB = visible[j].input || visible[j].expr;
+                        });
+                        allIntersections = allIntersections.concat(ints);
+                    }
+                }
+                if (allIntersections.length) {
+                    traces.push({
+                        x: allIntersections.map(function (p) { return p.x; }),
+                        y: allIntersections.map(function (p) { return p.y; }),
+                        mode: "markers",
+                        type: "scatter",
+                        name: "intersections",
+                        marker: {
+                            color: "#fff",
+                            size: 10,
+                            symbol: "x",
+                            line: { color: "#000", width: 1.5 }
+                        },
+                        customdata: allIntersections.map(function (p) { return p.labelA + " \u2229 " + p.labelB; }),
+                        hovertemplate: "(%{x:.2f}, %{y:.2f})<br>%{customdata}<extra>intersection</extra>"
+                    });
+                }
+
+                if (traces.length === 0) {
+                    traces = [{ x: [], y: [], mode: "lines", type: "scatter" }];
+                }
+
+                var layout = {
+                    paper_bgcolor: "#1a1a1a",
+                    plot_bgcolor: "#252525",
+                    font: { color: "#e8e8e8", size: 12 },
+                    hovermode: "closest",
+                    xaxis: { title: "x", gridcolor: "#333", zerolinecolor: "#555", showspikes: false },
+                    yaxis: { title: "y", gridcolor: "#333", zerolinecolor: "#555", showspikes: false },
+                    margin: { t: 40, r: 40, b: 50, l: 60 },
+                    showlegend: true,
+                    legend: { font: { size: 11 }, bgcolor: "rgba(0,0,0,0.3)" }
+                };
+
+                Plotly.newPlot(graphDiv, traces, layout, { responsive: true });
+
+                var first = visible[0];
+                if (first) {
+                    graphState.setFunction(first.expr);
+                } else {
+                    graphState.setFunction("0");
+                }
+                graphState.updateCursorDisplay();
+            }
+
+            // ── Catalog fills a new row ──
+
+            catalog.addEventListener("change", function () {
+                if (!catalog.value) return;
+                addExpression("y = " + catalog.value);
+                catalog.value = "";
+            });
+
+            addBtn.addEventListener("click", function () {
+                addExpression("");
+                var rows = rowsContainer.querySelectorAll(".expr-row__input");
+                if (rows.length) rows[rows.length - 1].focus();
+            });
+
+            // ── Sonification / cursor / settings (unchanged) ──
 
             var criticalPoints = window.CriticalPointDetector && CriticalPointDetector.integrate({
                 graphSelector: "#graph",
@@ -96,115 +530,6 @@
             });
             if (criticalPoints) window.criticalPoints = criticalPoints;
 
-            function renderLatex(text) {
-                if (!exprPreview) return;
-                var latex = mathEngine.toTex(text);
-                if (typeof katex !== "undefined" && latex) {
-                    try {
-                        exprPreview.innerHTML = katex.renderToString(latex, { throwOnError: false, displayMode: false });
-                        exprPreview.classList.remove("desmos-row__preview--empty", "desmos-row__preview--error");
-                    } catch (e) {
-                        exprPreview.textContent = latex;
-                    }
-                } else {
-                    exprPreview.textContent = latex || "";
-                    exprPreview.classList.toggle("desmos-row__preview--empty", !latex);
-                }
-            }
-
-            function showError(msg) {
-                if (!exprError) return;
-                exprError.textContent = msg || "";
-                exprError.style.display = msg ? "block" : "none";
-            }
-
-            function buildSliders(paramNames) {
-                if (!exprSliders) return;
-                exprSliders.innerHTML = "";
-                if (!paramNames || !paramNames.length) return;
-                paramNames.forEach(function (name) {
-                    var wrap = document.createElement("div");
-                    wrap.className = "desmos-row__slider-wrap";
-                    var label = document.createElement("label");
-                    label.textContent = name + ":";
-                    var slider = document.createElement("input");
-                    slider.type = "range";
-                    slider.className = "desmos-row__slider";
-                    slider.min = -10; slider.max = 10; slider.step = 0.1;
-                    slider.value = currentParams[name] != null ? currentParams[name] : 1;
-                    var valueSpan = document.createElement("span");
-                    valueSpan.className = "desmos-row__slider-value";
-                    valueSpan.textContent = slider.value;
-                    slider.addEventListener("input", function () {
-                        var v = parseFloat(this.value);
-                        valueSpan.textContent = Number.isInteger(v) ? v : v.toFixed(2);
-                        currentParams[name] = v;
-                        applyExpression(exprInput.value);
-                    });
-                    if (currentParams[name] == null) currentParams[name] = 1;
-                    wrap.appendChild(label);
-                    wrap.appendChild(slider);
-                    wrap.appendChild(valueSpan);
-                    exprSliders.appendChild(wrap);
-                });
-            }
-
-            function applyExpression(raw) {
-                var text = (raw || "").trim();
-                if (!text) { showError(""); return; }
-                var validation = mathEngine.validate(text);
-                if (!validation.valid) {
-                    showError(validation.error);
-                    return;
-                }
-                showError("");
-                var normalized = mathEngine.normalizeExpressionInput(text);
-                var paramNames = mathEngine.getParameterNames(text);
-                if (/sin\s*\(/i.test(normalized)) paramNames = [];
-                var newParams = {};
-                paramNames.forEach(function (n) {
-                    newParams[n] = currentParams[n] != null ? currentParams[n] : 1;
-                });
-                var paramsChanged = paramNames.join() !== Object.keys(currentParams).sort().join();
-                currentParams = newParams;
-                if (paramsChanged) buildSliders(paramNames);
-                graphState.setFunction(normalized);
-                graphState.drawGraph();
-                graphState.updateCursorDisplay();
-                if (criticalPoints) criticalPoints.run();
-                if (voiceIntro && voiceIntro.speakIntro) {
-                    voiceIntro.speakIntro(graphState.getFunctionLabel(), graphState.getDomain());
-                }
-            }
-
-            function scheduleApply() {
-                if (debounceTimer) clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(function () {
-                    debounceTimer = null;
-                    applyExpression(exprInput.value);
-                }, 120);
-            }
-
-            exprInput.addEventListener("input", function () {
-                renderLatex(this.value);
-                showError("");
-                scheduleApply();
-            });
-            exprInput.addEventListener("blur", function () {
-                applyExpression(this.value);
-            });
-            exprInput.addEventListener("keydown", function (e) {
-                if (e.key === "Enter") { applyExpression(this.value); this.blur(); }
-            });
-
-            catalog.addEventListener("change", function () {
-                if (!catalog.value) return;
-                exprInput.value = "y = " + catalog.value;
-                renderLatex(exprInput.value);
-                applyExpression(exprInput.value);
-                catalog.value = "";
-            });
-
             graphState.onCursorChange = criticalPoints ? criticalPoints.cursorHandler : function (x, y, isValid) {
                 sonification.setFrequencyFromY(y, isValid);
             };
@@ -215,9 +540,7 @@
                 if (stopCriticalToggle) stopCriticalToggle.checked = !!shouldStopAtCritical;
             }
 
-            graphState.onSettingsChange = function (stepSize, repeatDelayMs, shouldStopAtCritical) {
-                updateSettingsUi(stepSize, repeatDelayMs, shouldStopAtCritical);
-            };
+            graphState.onSettingsChange = function (s, r, c) { updateSettingsUi(s, r, c); };
 
             if (stepInput) {
                 stepInput.addEventListener("change", function () {
@@ -233,10 +556,10 @@
                 });
             }
 
+            // ── Init ──
+
             graphState.init();
-            exprInput.value = "y = sin(x)";
-            renderLatex(exprInput.value);
-            applyExpression(exprInput.value);
+            addExpression("y = sin(x)");
             updateSettingsUi(graphState.getCursorStep(), graphState.getRepeatDelayMs(), graphState.getStopAtCriticalPoints());
 
             if (focusRegion) focusRegion.focus();
