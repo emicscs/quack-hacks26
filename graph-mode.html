@@ -35,6 +35,14 @@
             <span id="catalog-desc" class="visually-hidden">Choose a function to graph and sonify.</span>
         </section>
 
+        <section aria-label="Additional expressions" class="expression-list-section">
+            <div class="expression-list-header">
+                <span>Additional Functions</span>
+                <button type="button" id="add-expr-btn" class="add-expr-btn" title="Add another function">+ Add</button>
+            </div>
+            <div id="extra-expression-rows"></div>
+        </section>
+
         <div id="graph" role="img" aria-label="Graph of function"></div>
 
         <section aria-live="polite" aria-atomic="true" id="live-region" class="live-region">
@@ -266,6 +274,161 @@
             if (sonification && sonification.setMaxPlaybackMs) {
                 applyMaxSoundDurationFromInput();
             }
+
+            // --- Multi-function support ---
+            var EXTRA_COLORS = ["#e74c3c", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c", "#e91e63", "#00bcd4"];
+            var extraEntries = [];
+            var extraNextId = 0;
+            var extraRowsContainer = document.getElementById("extra-expression-rows");
+            var addExtraBtn = document.getElementById("add-expr-btn");
+
+            var EXTRA_CP_NAMES = ["Extra min", "Extra max", "Extra inflection"];
+
+            function removeExtraCPTraces(graphDiv) {
+                if (!graphDiv || !Array.isArray(graphDiv.data)) return;
+                var indices = [];
+                for (var i = graphDiv.data.length - 1; i >= 0; i--) {
+                    if (EXTRA_CP_NAMES.indexOf(graphDiv.data[i].name) !== -1) indices.push(i);
+                }
+                if (indices.length) Plotly.deleteTraces(graphDiv, indices);
+            }
+
+            function addExtraTraces() {
+                var graphDiv = document.getElementById("graph");
+                if (!graphDiv || typeof Plotly === "undefined") return;
+                removeExtraCPTraces(graphDiv);
+                var dom = graphState.getDomain();
+                var newTraces = [];
+                var allMin = [], allMax = [], allInf = [];
+
+                extraEntries.forEach(function (entry) {
+                    if (!entry.visible || !entry.expr) return;
+                    var dataXY = mathEngine.sample(entry.expr, dom.min, dom.max, 0.05, entry.params);
+                    newTraces.push({
+                        x: dataXY.x,
+                        y: dataXY.y,
+                        mode: "lines",
+                        type: "scatter",
+                        name: entry.expr,
+                        line: { color: entry.color, width: 2 },
+                        connectgaps: false,
+                        hovertemplate: "(%{x:.2f}, %{y:.2f})<extra>" + entry.expr + "</extra>"
+                    });
+                    if (window.CriticalPointDetector && dataXY.x.length >= 3) {
+                        var cp = CriticalPointDetector.findCriticalPoints(dataXY.x, dataXY.y);
+                        allMin = allMin.concat(cp.minima);
+                        allMax = allMax.concat(cp.maxima);
+                        allInf = allInf.concat(cp.inflection);
+                    }
+                });
+
+                if (allMin.length) {
+                    newTraces.push({
+                        x: allMin.map(function (p) { return p.x; }),
+                        y: allMin.map(function (p) { return p.y; }),
+                        mode: "markers", type: "scatter",
+                        marker: { size: 12, color: "#2ecc71", symbol: "triangle-down", line: { color: "#1a1a1a", width: 1 } },
+                        name: "Extra min"
+                    });
+                }
+                if (allMax.length) {
+                    newTraces.push({
+                        x: allMax.map(function (p) { return p.x; }),
+                        y: allMax.map(function (p) { return p.y; }),
+                        mode: "markers", type: "scatter",
+                        marker: { size: 12, color: "#e74c3c", symbol: "triangle-up", line: { color: "#1a1a1a", width: 1 } },
+                        name: "Extra max"
+                    });
+                }
+                if (allInf.length) {
+                    newTraces.push({
+                        x: allInf.map(function (p) { return p.x; }),
+                        y: allInf.map(function (p) { return p.y; }),
+                        mode: "markers", type: "scatter",
+                        marker: { size: 12, color: "#3498db", symbol: "diamond", line: { color: "#1a1a1a", width: 1 } },
+                        name: "Extra inflection"
+                    });
+                }
+
+                if (newTraces.length > 0) {
+                    Plotly.addTraces(graphDiv, newTraces);
+                }
+            }
+
+            var _origDrawGraph = graphState.drawGraph;
+            graphState.drawGraph = function (options) {
+                options = options || {};
+                var origAfter = options.onAfterDraw;
+                options.onAfterDraw = function () {
+                    if (origAfter) origAfter();
+                    addExtraTraces();
+                };
+                _origDrawGraph(options);
+            };
+
+            function buildExtraRow(entry) {
+                var row = document.createElement("div");
+                row.className = "expr-row";
+                row.dataset.id = entry.id;
+                row.innerHTML =
+                    "<div class=\"expression-entry__row\">" +
+                    "  <span class=\"expr-row__color\" style=\"background:" + entry.color + "\"></span>" +
+                    "  <button type=\"button\" class=\"expr-visibility-btn\" title=\"Show/hide graph\">\u25CF</button>" +
+                    "  <input type=\"text\" class=\"desmos-row__input\" placeholder=\"e.g. x^2, cos(x)\" autocomplete=\"off\" spellcheck=\"false\" />" +
+                    "  <button type=\"button\" class=\"expr-row__delete\" title=\"Remove\">\u00D7</button>" +
+                    "</div>";
+
+                var inputEl = row.querySelector(".desmos-row__input");
+                var visBtn = row.querySelector(".expr-visibility-btn");
+                var delBtn = row.querySelector(".expr-row__delete");
+
+                function syncVis() {
+                    visBtn.textContent = entry.visible ? "\u25CF" : "\u25CB";
+                    visBtn.style.color = entry.visible ? entry.color : "";
+                }
+                syncVis();
+
+                function flushInput() {
+                    var val = inputEl.value.trim();
+                    entry.input = val;
+                    entry.expr = "";
+                    if (!val) { refreshGraph(); return; }
+                    var v = mathEngine.validate(val);
+                    if (!v.valid) { entry.expr = ""; refreshGraph(); return; }
+                    entry.expr = mathEngine.normalizeExpressionInput(val);
+                    refreshGraph();
+                }
+
+                function refreshGraph() {
+                    graphState.drawGraph();
+                    graphState.updateCursorDisplay();
+                    if (criticalPoints) criticalPoints.run();
+                }
+
+                var timer = null;
+                inputEl.addEventListener("input", function () {
+                    if (timer) clearTimeout(timer);
+                    timer = setTimeout(function () { timer = null; flushInput(); }, 150);
+                });
+                inputEl.addEventListener("blur", flushInput);
+                inputEl.addEventListener("keydown", function (e) { if (e.key === "Enter") { flushInput(); inputEl.blur(); } });
+                visBtn.addEventListener("click", function () { entry.visible = !entry.visible; syncVis(); refreshGraph(); });
+                delBtn.addEventListener("click", function () {
+                    extraEntries = extraEntries.filter(function (e) { return e.id !== entry.id; });
+                    row.remove();
+                    refreshGraph();
+                });
+                return row;
+            }
+
+            addExtraBtn.addEventListener("click", function () {
+                var id = extraNextId++;
+                var entry = { id: id, input: "", expr: "", visible: true, color: EXTRA_COLORS[id % EXTRA_COLORS.length], params: {} };
+                extraEntries.push(entry);
+                var rowEl = buildExtraRow(entry);
+                extraRowsContainer.appendChild(rowEl);
+                rowEl.querySelector(".desmos-row__input").focus();
+            });
 
             graphState.init();
             exprInput.value = "y = sin(x)";
