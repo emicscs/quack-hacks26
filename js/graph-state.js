@@ -634,13 +634,13 @@
             plot_bgcolor: "#13161e",
             font: { color: "#edf2ff", size: 12 },
             hovermode: "closest",
-            xaxis: { title: "x", gridcolor: "rgba(255,255,255,0.06)", zerolinecolor: "rgba(232,168,74,0.35)", showspikes: false, range: [domain.min, domain.max] },
-            yaxis: { title: "y", gridcolor: "rgba(255,255,255,0.06)", zerolinecolor: "rgba(232,168,74,0.35)", showspikes: false },
+            xaxis: { title: "x", gridcolor: "rgba(255,255,255,0.06)", zerolinecolor: "rgba(232,168,74,0.35)", showspikes: false, range: [domain.min, domain.max], fixedrange: true },
+            yaxis: { title: "y", gridcolor: "rgba(255,255,255,0.06)", zerolinecolor: "rgba(232,168,74,0.35)", showspikes: false, fixedrange: true },
             margin: { t: 40, r: 40, b: 50, l: 60 },
             showlegend: true,
             uirevision: "graph-mode"
         };
-        var config = { responsive: true };
+        var config = { responsive: true, scrollZoom: false };
 
         if (options.preserveCursor === true) {
             currentX = clampToTrueDomain(currentX);
