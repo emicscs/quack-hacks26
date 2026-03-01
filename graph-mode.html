@@ -19,7 +19,6 @@
 </head>
 
 <body class="graph-mode-page">
-    <div class="graph-mode-bg" aria-hidden="true"></div>
     <main role="main" aria-label="Graph mode – explore function with sound" class="graph-mode-main">
         <header class="graph-mode-header">
             <h1>Graph Mode</h1>
@@ -32,6 +31,8 @@
                 <section aria-label="Expression entry" class="expression-entry graph-mode-card">
                     <h2 class="graph-mode-card__title">Function</h2>
                     <div class="expression-entry__row">
+                        <span id="main-expr-color" class="expr-row__color main-expr-color" aria-hidden="true"></span>
+                        <button type="button" id="main-visibility-btn" class="expr-visibility-btn" title="Show/hide main function" aria-label="Toggle main function visibility">&#9679;</button>
                         <input type="text" id="expr-input" class="desmos-row__input" placeholder="y = 2x^2 + 3, y = a sin(x), y = e^x" autocomplete="off" spellcheck="false" aria-label="Function expression" />
                         <select id="function-catalog" aria-describedby="catalog-desc" title="Quick examples">
                             <option value="">Examples...</option>
@@ -42,7 +43,6 @@
                             <option value="e^x">eˣ</option>
                         </select>
                     </div>
-                    <div id="expr-preview" class="desmos-row__preview desmos-row__preview--empty"></div>
                     <div id="expr-error" class="desmos-row__error" style="display:none" role="alert"></div>
                     <div id="expr-sliders" class="desmos-row__sliders"></div>
                     <span id="catalog-desc" class="visually-hidden">Choose a function to graph and sonify.</span>
@@ -65,6 +65,7 @@
                         <button type="button" id="add-expr-btn" class="add-expr-btn" title="Add another function">+ Add</button>
                     </div>
                     <div id="extra-expression-rows"></div>
+                    <span id="catalog-desc" class="visually-hidden">Choose a function to graph and sonify.</span>
                 </section>
 
                 <section aria-label="Navigation settings" class="graph-mode-card">
@@ -133,6 +134,8 @@
             var exprPreview = document.getElementById("expr-preview");
             var exprError = document.getElementById("expr-error");
             var exprSliders = document.getElementById("expr-sliders");
+            var mainExprColorDot = document.getElementById("main-expr-color");
+            var mainVisibilityBtn = document.getElementById("main-visibility-btn");
             var focusRegion = document.getElementById("keyboard-focus-region");
             var stepInput = document.getElementById("step-size-input");
             var maxSoundDurationInput = document.getElementById("max-sound-duration-input");
@@ -151,6 +154,10 @@
             var criticalPoints = window.CriticalPointDetector && CriticalPointDetector.integrate({
                 graphSelector: "#graph",
                 getData: function () {
+                    if (!mainExpressionVisible) {
+                        // Return empty data so detector clears existing main critical-point markers.
+                        return { x: [], y: [] };
+                    }
                     var d = graphState.dataXY;
                     if (!d || !d.x || !d.y) return null;
                     var out = { x: d.x.slice(), y: d.y.slice() };
@@ -304,6 +311,10 @@
                 }
             }
 
+            function playUiActionCue() {
+                if (sonification && sonification.playBlockedCue) sonification.playBlockedCue();
+            }
+
             graphState.onSettingsChange = function (stepSize, repeatDelayMs, shouldStopAtCritical) {
                 updateSettingsUi(stepSize, repeatDelayMs, shouldStopAtCritical);
             };
@@ -333,11 +344,24 @@
             // --- Multi-function support ---
             var EXTRA_COLORS = ["#e74c3c", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c", "#e91e63", "#00bcd4"];
             var mainExpressionColor = "#e8a84a";
+            var mainExpressionVisible = true;
             var extraEntries = [];
             var extraNextId = 0;
             var extraRowsContainer = document.getElementById("extra-expression-rows");
-            var addExtraBtn = document.getElementById("add-expr-btn");
             var EXTRA_CP_NAMES = ["Extra min", "Extra max", "Extra inflection", "Intersection"];
+
+            function syncMainExpressionColor() {
+                if (!mainExprColorDot) return;
+                mainExprColorDot.style.background = mainExpressionColor;
+            }
+
+            function syncMainVisibilityButton() {
+                if (!mainVisibilityBtn) return;
+                mainVisibilityBtn.textContent = mainExpressionVisible ? "\u25CF" : "\u25CB";
+                mainVisibilityBtn.style.color = mainExpressionVisible ? mainExpressionColor : "";
+                mainVisibilityBtn.setAttribute("aria-label", mainExpressionVisible ? "Hide main function" : "Show main function");
+                mainVisibilityBtn.setAttribute("title", mainExpressionVisible ? "Hide main function" : "Show main function");
+            }
 
             function removeExtraTraces(graphDiv) {
                 if (!graphDiv || !Array.isArray(graphDiv.data)) return;
@@ -408,7 +432,7 @@
                 // --- Intersection detection between all visible graph pairs ---
                 if (window.CriticalPointDetector && CriticalPointDetector.findIntersections) {
                     var visibleFuncs = [];
-                    if (currentMainExpr) {
+                    if (mainExpressionVisible && currentMainExpr) {
                         visibleFuncs.push({ expr: currentMainExpr, params: currentParams });
                     }
                     extraEntries.forEach(function (e) {
@@ -434,11 +458,8 @@
                         newTraces.push({
                             x: allIx.map(function (p) { return p.x; }),
                             y: allIx.map(function (p) { return p.y; }),
-                            mode: "markers+text", type: "scatter",
+                            mode: "markers", type: "scatter",
                             marker: { size: 14, color: "#ff9800", symbol: "diamond-open", line: { color: "#ff9800", width: 2 } },
-                            text: allIx.map(function (p) { return "(" + p.x.toFixed(2) + ", " + p.y.toFixed(2) + ")"; }),
-                            textposition: "top center",
-                            textfont: { color: "#ff9800", size: 11 },
                             hovertemplate: "Intersection<br>(%{x:.4f}, %{y:.4f})<extra></extra>",
                             name: "Intersection"
                         });
@@ -456,6 +477,7 @@
             graphState.drawGraph = function (options) {
                 options = options || {};
                 options.mainTraceColor = mainExpressionColor;
+                options.mainTraceVisible = mainExpressionVisible;
                 var origAfter = options.onAfterDraw;
                 options.onAfterDraw = function () {
                     if (origAfter) origAfter();
@@ -481,20 +503,67 @@
                 var visBtn = row.querySelector(".expr-visibility-btn");
                 var swapBtn = row.querySelector(".expr-row__swap");
                 var delBtn = row.querySelector(".expr-row__delete");
+                var colorEl = row.querySelector(".expr-row__color");
+                entry.rowEl = row;
+                entry.inputEl = inputEl;
 
                 function syncVis() {
+                    if (entry.isPlaceholder) {
+                        visBtn.textContent = "\u25CB";
+                        visBtn.style.color = "";
+                        return;
+                    }
                     visBtn.textContent = entry.visible ? "\u25CF" : "\u25CB";
                     visBtn.style.color = entry.visible ? entry.color : "";
                 }
-                syncVis();
-                swapBtn.disabled = !entry.expr;
 
-                function flushInput() {
+                function setPlaceholderState(isPlaceholder) {
+                    entry.isPlaceholder = !!isPlaceholder;
+                    row.classList.toggle("expr-row--placeholder", entry.isPlaceholder);
+                    if (entry.isPlaceholder) {
+                        entry.input = "";
+                        entry.expr = "";
+                        inputEl.value = "";
+                        inputEl.readOnly = true;
+                        inputEl.placeholder = "Click to add";
+                        visBtn.disabled = true;
+                        swapBtn.disabled = true;
+                        delBtn.disabled = true;
+                    } else {
+                        inputEl.readOnly = false;
+                        inputEl.placeholder = "e.g. x^2, cos(x)";
+                        visBtn.disabled = false;
+                        delBtn.disabled = false;
+                        swapBtn.disabled = !entry.expr;
+                    }
+                    syncVis();
+                }
+
+                function refreshGraph() {
+                    graphState.drawGraph();
+                    graphState.updateCursorDisplay();
+                    if (criticalPoints) criticalPoints.run({ playTones: false });
+                }
+
+                function flushInput(fromBlur) {
+                    if (entry.isPlaceholder) return;
                     var val = inputEl.value.trim();
                     entry.input = val;
                     entry.expr = "";
                     swapBtn.disabled = true;
-                    if (!val) { refreshGraph(); return; }
+                    if (!val) {
+                        if (fromBlur) {
+                            var isLast = extraEntries.length && extraEntries[extraEntries.length - 1].id === entry.id;
+                            if (isLast) setPlaceholderState(true);
+                            else {
+                                extraEntries = extraEntries.filter(function (e) { return e.id !== entry.id; });
+                                row.remove();
+                            }
+                            ensureTrailingPlaceholderRow();
+                        }
+                        refreshGraph();
+                        return;
+                    }
                     var v = mathEngine.validate(val);
                     if (!v.valid) { refreshGraph(); return; }
                     entry.expr = mathEngine.normalizeExpressionInput(val);
@@ -502,21 +571,42 @@
                     refreshGraph();
                 }
 
-                function refreshGraph() {
-                    graphState.drawGraph();
-                    graphState.updateCursorDisplay();
-                    if (criticalPoints) criticalPoints.run();
+                function activatePlaceholder() {
+                    if (!entry.isPlaceholder) return;
+                    setPlaceholderState(false);
+                    inputEl.focus();
+                    playUiActionCue();
                 }
 
                 var timer = null;
                 inputEl.addEventListener("input", function () {
+                    if (entry.isPlaceholder) return;
+                    entry.input = inputEl.value.trim();
+                    if (entry.input && extraEntries.length && extraEntries[extraEntries.length - 1].id === entry.id) {
+                        ensureTrailingPlaceholderRow();
+                    }
                     if (timer) clearTimeout(timer);
-                    timer = setTimeout(function () { timer = null; flushInput(); }, 150);
+                    timer = setTimeout(function () { timer = null; flushInput(false); }, 150);
                 });
-                inputEl.addEventListener("blur", flushInput);
-                inputEl.addEventListener("keydown", function (e) { if (e.key === "Enter") { flushInput(); inputEl.blur(); } });
-                visBtn.addEventListener("click", function () { entry.visible = !entry.visible; syncVis(); refreshGraph(); });
+                inputEl.addEventListener("focus", activatePlaceholder);
+                inputEl.addEventListener("blur", function () {
+                    if (timer) {
+                        clearTimeout(timer);
+                        timer = null;
+                    }
+                    flushInput(true);
+                });
+                inputEl.addEventListener("keydown", function (e) { if (e.key === "Enter") { flushInput(false); inputEl.blur(); } });
+                row.addEventListener("mousedown", function (e) {
+                    if (!entry.isPlaceholder) return;
+                    if (e.target === row || (e.target && e.target.closest && e.target.closest(".expression-entry__row"))) {
+                        e.preventDefault();
+                        activatePlaceholder();
+                    }
+                });
+                visBtn.addEventListener("click", function () { entry.visible = !entry.visible; syncVis(); refreshGraph(); playUiActionCue(); });
                 swapBtn.addEventListener("click", function () {
+                    if (entry.isPlaceholder) return;
                     var entryInput = entry.input;
                     var entryExpr = entry.expr;
                     var entryParams = Object.assign({}, entry.params);
@@ -530,6 +620,7 @@
                     entry.color = mainExpressionColor;
                     mainExpressionColor = entryColor;
                     row.querySelector(".expr-row__color").style.background = entry.color;
+                    syncMainExpressionColor();
                     inputEl.value = prevMainInput;
                     exprInput.value = entryInput;
                     currentParams = entryParams;
@@ -537,23 +628,56 @@
                     applyExpression(exprInput.value);
                 });
                 delBtn.addEventListener("click", function () {
+                    if (entry.isPlaceholder) return;
                     extraEntries = extraEntries.filter(function (e) { return e.id !== entry.id; });
                     row.remove();
+                    ensureTrailingPlaceholderRow();
                     refreshGraph();
+                    playUiActionCue();
                 });
+                setPlaceholderState(!!entry.isPlaceholder);
                 return row;
             }
 
-            addExtraBtn.addEventListener("click", function () {
+            function addExtraEntry(focusInput, isPlaceholder) {
                 var id = extraNextId++;
-                var entry = { id: id, input: "", expr: "", visible: true, color: EXTRA_COLORS[id % EXTRA_COLORS.length], params: {} };
+                var entry = { id: id, input: "", expr: "", visible: true, color: EXTRA_COLORS[id % EXTRA_COLORS.length], params: {}, isPlaceholder: !!isPlaceholder };
                 extraEntries.push(entry);
                 var rowEl = buildExtraRow(entry);
                 extraRowsContainer.appendChild(rowEl);
-                rowEl.querySelector(".desmos-row__input").focus();
-            });
+                if (focusInput) rowEl.querySelector(".desmos-row__input").focus();
+                return entry;
+            }
+
+            function ensureTrailingPlaceholderRow() {
+                if (!extraEntries.length) {
+                    addExtraEntry(false, true);
+                    return;
+                }
+                for (var i = extraEntries.length - 2; i >= 0; i--) {
+                    if (extraEntries[i].isPlaceholder) {
+                        if (extraEntries[i].rowEl) extraEntries[i].rowEl.remove();
+                        extraEntries.splice(i, 1);
+                    }
+                }
+                var lastEntry = extraEntries[extraEntries.length - 1];
+                if (!lastEntry || !lastEntry.isPlaceholder) {
+                    addExtraEntry(false, true);
+                }
+            }
 
             // --- Sound directory buttons ---
+            if (mainVisibilityBtn) {
+                mainVisibilityBtn.addEventListener("click", function () {
+                    mainExpressionVisible = !mainExpressionVisible;
+                    syncMainVisibilityButton();
+                    graphState.drawGraph();
+                    graphState.updateCursorDisplay();
+                    if (criticalPoints) criticalPoints.run({ playTones: false });
+                    playUiActionCue();
+                });
+            }
+
             var SOUND_DESCRIPTIONS = {
                 min: "This is the local minimum sound. You will hear a low gong tone when the cursor crosses a valley, the lowest point in a section of the graph.",
                 max: "This is the local maximum sound. You will hear a high bell tone when the cursor crosses a peak, the highest point in a section of the graph.",
@@ -582,6 +706,9 @@
             }
 
             graphState.init();
+            syncMainExpressionColor();
+            syncMainVisibilityButton();
+            ensureTrailingPlaceholderRow();
             exprInput.value = "y = sin(x)";
             renderLatex(exprInput.value);
             applyExpression(exprInput.value);

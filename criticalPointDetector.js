@@ -148,7 +148,7 @@
         }
 
         if (type === "min") {
-            var minGain = Math.max(gainValue, 0.7);
+            var minGain = Math.max(gainValue, 1.1);
             var gongGain = ctx.createGain();
             var gongMain = ctx.createOscillator();
             var gongLow = ctx.createOscillator();
@@ -182,7 +182,7 @@
         snareFilter.frequency.setValueAtTime(1800, when);
         snareFilter.Q.setValueAtTime(0.8, when);
         var noiseGain = ctx.createGain();
-        noiseGain.gain.setValueAtTime(Math.min(0.22, gainValue), when);
+        noiseGain.gain.setValueAtTime(Math.min(0.28, gainValue), when);
         noiseGain.gain.exponentialRampToValueAtTime(0.0001, when + noiseDuration);
         noise.connect(snareFilter);
         snareFilter.connect(noiseGain);
@@ -193,7 +193,7 @@
         body.type = "triangle";
         body.frequency.setValueAtTime(185, when);
         body.frequency.exponentialRampToValueAtTime(130, when + noiseDuration * 0.9);
-        bodyGain.gain.setValueAtTime(Math.min(0.1, gainValue * 0.6), when);
+        bodyGain.gain.setValueAtTime(Math.min(0.13, gainValue * 0.7), when);
         bodyGain.gain.exponentialRampToValueAtTime(0.0001, when + noiseDuration * 0.9);
         body.connect(bodyGain);
         bodyGain.connect(ctx.destination);
@@ -219,7 +219,7 @@
         bpf.frequency.value = 12000;
         bpf.Q.value = 0.8;
         var nGain = ctx.createGain();
-        nGain.gain.setValueAtTime(1.0, when);
+        nGain.gain.setValueAtTime(1.15, when);
         nGain.gain.exponentialRampToValueAtTime(0.001, when + tambDur);
         noise.connect(hpf);
         hpf.connect(bpf);
@@ -229,7 +229,7 @@
         jingle.type = "square";
         jingle.frequency.setValueAtTime(6500, when);
         var jGain = ctx.createGain();
-        jGain.gain.setValueAtTime(0.3, when);
+        jGain.gain.setValueAtTime(0.38, when);
         jGain.gain.exponentialRampToValueAtTime(0.001, when + tambDur * 0.6);
         jingle.connect(jGain);
         jGain.connect(ctx.destination);
@@ -251,23 +251,23 @@
 
         var duration = Number.isFinite(options.beepDuration) ? options.beepDuration : 0.16;
         var gap = Number.isFinite(options.beepGap) ? options.beepGap : 0.08;
-        var cueGain = Number.isFinite(options.cueGain) ? options.cueGain : 0.22;
+        var cueGain = Number.isFinite(options.cueGain) ? options.cueGain : 0.32;
 
         var useCustom = (options.soundDirectory || options.soundUrls) && crossingState.soundBuffers;
         var introCtx = options.audioContext || crossingState.audioContext || ctx;
         var t = introCtx.currentTime;
         points.minima.forEach(function () {
-            if (useCustom && crossingState.soundBuffers["intro-min"]) playBufferSound(introCtx, crossingState.soundBuffers["intro-min"], t, 0.2);
+            if (useCustom && crossingState.soundBuffers["intro-min"]) playBufferSound(introCtx, crossingState.soundBuffers["intro-min"], t, 0.5);
             else playCriticalCue(introCtx, "min", t, duration, cueGain);
             t += duration + gap;
         });
         points.maxima.forEach(function () {
-            if (useCustom && crossingState.soundBuffers["intro-max"]) playBufferSound(introCtx, crossingState.soundBuffers["intro-max"], t, 0.2);
+            if (useCustom && crossingState.soundBuffers["intro-max"]) playBufferSound(introCtx, crossingState.soundBuffers["intro-max"], t, 0.35);
             else playCriticalCue(introCtx, "max", t, duration, cueGain);
             t += duration + gap;
         });
         points.inflection.forEach(function () {
-            if (useCustom && crossingState.soundBuffers["intro-inflection"]) playBufferSound(introCtx, crossingState.soundBuffers["intro-inflection"], t, 0.2);
+            if (useCustom && crossingState.soundBuffers["intro-inflection"]) playBufferSound(introCtx, crossingState.soundBuffers["intro-inflection"], t, 0.4);
             else playCriticalCue(introCtx, "inflection", t, duration, cueGain);
             t += duration + gap;
         });
@@ -360,13 +360,15 @@
         var crossingKey = "crossing-" + type;
         var buf = crossingState.soundBuffers && crossingState.soundBuffers[crossingKey];
         if (buf && (options.soundDirectory || options.soundUrls)) {
-            var bufGain = Number.isFinite(options.crossingGain) ? options.crossingGain : 0.4;
+            var bufGain;
+            if (Number.isFinite(options.crossingGain)) bufGain = options.crossingGain;
+            else bufGain = type === "min" ? 0.75 : (type === "inflection" ? 0.6 : 0.55);
             playBufferSound(ctx, buf, when, bufGain);
             return;
         }
 
         var duration = Number.isFinite(options.crossingDuration) ? options.crossingDuration : 0.24;
-        var gain = Number.isFinite(options.crossingGain) ? options.crossingGain : 0.26;
+        var gain = Number.isFinite(options.crossingGain) ? options.crossingGain : (type === "min" ? 0.37 : (type === "inflection" ? 0.38 : 0.34));
         playCriticalCue(ctx, type, when, duration, gain);
     }
 

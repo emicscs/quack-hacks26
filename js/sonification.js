@@ -8,6 +8,8 @@
     var audioContext = null;
     var oscillator = null;
     var gainNode = null;
+    var blockedCueOsc = null;
+    var blockedCueGain = null;
     var isRunning = false;
     var playbackTimerId = null;
     var maxPlaybackMs = 500;
@@ -29,7 +31,7 @@
         var ctx = getAudioContext();
         if (oscillator) return;
         gainNode = ctx.createGain();
-        gainNode.gain.value = 0.15;
+        gainNode.gain.value = 0.11;
         gainNode.connect(ctx.destination);
         oscillator = ctx.createOscillator();
         oscillator.type = "sine";
@@ -78,12 +80,12 @@
         ensureOscillator();
         if (!oscillator) return;
         if (!isValid) {
-            gainNode.gain.setTargetAtTime(0.05, audioContext.currentTime, 0.02);
+            gainNode.gain.setTargetAtTime(0.04, audioContext.currentTime, 0.02);
             oscillator.frequency.setTargetAtTime(220, audioContext.currentTime, 0.02);
             scheduleAutoStop();
             return;
         }
-        gainNode.gain.setTargetAtTime(0.15, audioContext.currentTime, 0.02);
+        gainNode.gain.setTargetAtTime(0.11, audioContext.currentTime, 0.02);
         var freq = yToFrequency(y);
         oscillator.frequency.setTargetAtTime(freq, audioContext.currentTime, 0.02);
         scheduleAutoStop();
@@ -109,18 +111,35 @@
     function playBlockedCue() {
         var ctx = getAudioContext();
         var now = ctx.currentTime;
+        // Keep a dedicated UI cue voice so repeated UI actions do not stack.
+        if (blockedCueOsc) {
+            try { blockedCueOsc.stop(now); } catch (e) { }
+            blockedCueOsc = null;
+            blockedCueGain = null;
+        }
         var osc = ctx.createOscillator();
         var gain = ctx.createGain();
+        blockedCueOsc = osc;
+        blockedCueGain = gain;
         osc.type = "triangle";
-        osc.frequency.setValueAtTime(200, now);
-        osc.frequency.exponentialRampToValueAtTime(130, now + 0.11);
+        // Pure confirmation chirp (no separate beep attack).
+        osc.frequency.setValueAtTime(980, now);
+        osc.frequency.exponentialRampToValueAtTime(1520, now + 0.02);
+        osc.frequency.exponentialRampToValueAtTime(1320, now + 0.06);
         gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.exponentialRampToValueAtTime(0.09, now + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.055, now + 0.006);
+        gain.gain.exponentialRampToValueAtTime(0.04, now + 0.028);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.065);
         osc.connect(gain);
         gain.connect(ctx.destination);
+        osc.onended = function () {
+            if (blockedCueOsc === osc) {
+                blockedCueOsc = null;
+                blockedCueGain = null;
+            }
+        };
         osc.start(now);
-        osc.stop(now + 0.13);
+        osc.stop(now + 0.07);
     }
 
     global.AudibleMath = global.AudibleMath || {};
