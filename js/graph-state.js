@@ -11,7 +11,7 @@
     var domain = { min: -2 * Math.PI, max: 2 * Math.PI };
     var trueDomainBounds = { min: null, max: null };
     var step = 0.1;
-    var cursorStep = 1;
+    var cursorStep = 0.1;
     var repeatDelayMs = 200;
     var stopAtCriticalPoints = false;
     var currentParams = {};
@@ -168,6 +168,20 @@
             maxX += width;
         }
         return setViewWindow(minX, maxX, true);
+    }
+
+    function goToOrigin() {
+        var originX = clampToTrueDomain(0);
+        originX = Math.max(domain.min, Math.min(domain.max, originX));
+        if (originX === currentX) return false;
+        currentX = originX;
+        loadChunkIfOutOfView();
+        var y = getYAt(currentX);
+        var isValid = !isNaN(y);
+        updateCursorDisplay();
+        updatePlotlyCursor();
+        onCursorChange(currentX, isValid ? y : 0, isValid);
+        return true;
     }
 
     function moveCursor(delta) {
@@ -706,6 +720,12 @@
 
         document.addEventListener("keydown", function (e) {
             if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+            if (e.key === " ") {
+                e.preventDefault();
+                resumeAudioIfNeeded();
+                goToOrigin();
+                return;
+            }
             if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
                 e.preventDefault();
                 if (e.repeat || activeNavKey === e.key) return;

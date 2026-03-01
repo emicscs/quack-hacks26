@@ -53,7 +53,7 @@
                     <div class="graph-mode-settings">
                         <div class="graph-mode-setting">
                             <label for="step-size-input">Step size</label>
-                            <input id="step-size-input" type="number" min="0.1" step="0.1" value="1" inputmode="decimal">
+                            <input id="step-size-input" type="number" min="0.1" step="0.1" value="0.1" inputmode="decimal">
                         </div>
                         <div class="graph-mode-setting">
                             <label for="max-sound-duration-input">Max sound duration (s)</label>
@@ -69,7 +69,7 @@
             </div>
             <div class="graph-mode-graph-wrap">
                 <div class="graph-mode-graph-topbar">
-                    <p class="instructions graph-mode-instructions">Adjust along the graph with <kbd>←</kbd>/<kbd>→</kbd> keys.</p>
+                    <p class="instructions graph-mode-instructions">Adjust along the graph with <kbd>←</kbd>/<kbd>→</kbd> keys. <kbd>Space</kbd> returns to origin.</p>
                     <div class="graph-mode-graph-actions">
                         <button type="button" id="mic-btn" class="mic-btn" aria-label="Voice input – click to start recording" title="Voice input">
                             <svg class="mic-btn__icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
@@ -108,7 +108,7 @@
 
         <p class="instructions">Use <kbd>←</kbd>/<kbd>→</kbd> to move by step size. Tap once for one immediate step,
             hold to repeat using the step interval. Use <kbd>↑</kbd>/<kbd>↓</kbd> to change the step interval by 0.1
-            seconds.</p>
+            seconds. Press <kbd>Space</kbd> to return to the origin (0, 0).</p>
         <div id="keyboard-focus-region" tabindex="0" class="visually-hidden"
             aria-label="Graph exploration area. Use arrow keys to move."></div>
     </main>
@@ -121,6 +121,14 @@
     <script src="criticalPointDetector.js"></script>
     <script>
         (function initGraphMode() {
+            // API base for voice-command and describe. Use "" when page is served from the Express server (e.g. http://localhost:3000).
+            // If you open the app from another origin (e.g. Live Server on another port), set: <meta name="audible-math-api-base" content="http://localhost:3000">
+            var API_BASE = (function () {
+                var meta = document.querySelector('meta[name="audible-math-api-base"]');
+                return (meta && meta.getAttribute('content')) ? meta.getAttribute('content').replace(/\/$/, '') : '';
+            })();
+            window.AudibleMath = window.AudibleMath || {};
+            window.AudibleMath.apiBase = API_BASE;
             var catalog = document.getElementById("function-catalog");
             var exprInput = document.getElementById("expr-input");
             var exprPreview = document.getElementById("expr-preview");
@@ -904,7 +912,8 @@
                     setProcessingState(true);
                     speakFeedback("Processing.");
 
-                    return fetch("/api/voice-command", {
+                    var url = API_BASE + "/api/voice-command";
+                    return fetch(url, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
@@ -912,7 +921,21 @@
                             context: getAppContext()
                         })
                     })
-                    .then(function (res) { return res.json(); })
+                    .then(function (res) {
+                        var contentType = (res.headers.get("Content-Type") || "").toLowerCase();
+                        if (!res.ok || contentType.indexOf("text/html") !== -1) {
+                            return res.text().then(function (body) {
+                                var msg = "Voice command server error.";
+                                if (res.status === 404 || (body && body.trim().toLowerCase().indexOf("<!doctype") !== -1)) {
+                                    msg = "Voice commands need the app server. Open the app from localhost 3000.";
+                                } else if (res.status >= 400) {
+                                    msg = "Server returned " + res.status + ". " + (body ? body.slice(0, 100) : "");
+                                }
+                                throw new Error(msg);
+                            });
+                        }
+                        return res.json();
+                    })
                     .then(function (cmd) {
                         console.log("[voice] Gemini returned:", JSON.stringify(cmd));
                         setProcessingState(false);
@@ -921,7 +944,7 @@
                     .catch(function (err) {
                         console.error("[voice] Request failed:", err);
                         setProcessingState(false);
-                        speakFeedback("Sorry, something went wrong. Please try again.");
+                        speakFeedback(err && err.message ? err.message : "Sorry, something went wrong. Please try again.");
                         return null;
                     });
                 }

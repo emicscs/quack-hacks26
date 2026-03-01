@@ -12,7 +12,8 @@
         if (typeof console !== "undefined" && console.log) {
             console.log("[describe-api] request equation:", equation, "image length:", base64.length);
         }
-        return fetch("/api/describe", {
+        var baseUrl = (global.AudibleMath && global.AudibleMath.apiBase) || "";
+        return fetch(baseUrl + "/api/describe", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ equation: equation, imageBase64: base64 })
