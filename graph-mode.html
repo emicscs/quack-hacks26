@@ -53,11 +53,7 @@
                     <div class="graph-mode-settings">
                         <div class="graph-mode-setting">
                             <label for="step-size-input">Step size</label>
-                            <input id="step-size-input" type="number" min="0.1" step="0.1" value="0.1" inputmode="decimal">
-                        </div>
-                        <div class="graph-mode-setting">
-                            <label for="max-sound-duration-input">Max sound duration (s)</label>
-                            <input id="max-sound-duration-input" type="number" min="0.1" step="0.1" value="0.5" inputmode="decimal">
+                            <input id="step-size-input" type="number" min="0.1" step="0.1" value="0.2" inputmode="decimal">
                         </div>
                         <p class="graph-mode-setting-full">Step interval: <span id="buffer-seconds">0.2</span>s (adjust with <kbd>↑</kbd>/<kbd>↓</kbd> keys)</p>
                         <label for="stop-critical-toggle" class="graph-mode-setting-full graph-mode-setting-check">
@@ -69,13 +65,12 @@
             </div>
             <div class="graph-mode-graph-wrap">
                 <div class="graph-mode-graph-topbar">
-                    <p class="instructions graph-mode-instructions">Adjust along the graph with <kbd>←</kbd>/<kbd>→</kbd> keys. <kbd>Space</kbd> returns to origin.</p>
                     <div class="graph-mode-graph-actions">
                         <button type="button" id="mic-btn" class="mic-btn" aria-label="Voice input – click to start recording" title="Voice input">
                             <svg class="mic-btn__icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                         </button>
                         <div class="describe-graph-wrap">
-                            <button type="button" id="describe-function-btn" class="describe-graph-btn" aria-describedby="describe-graph-tip">describe graph</button>
+                            <button type="button" id="describe-function-btn" class="describe-graph-btn" aria-describedby="describe-graph-tip">Describe</button>
                             <div id="describe-graph-tip" class="describe-graph-tip" role="tooltip">Generate a mathematical description of your function and graph (type, bounds, asymptotes). The audio you hear is read from the description that Gemini creates.</div>
                         </div>
                     </div>
@@ -107,8 +102,7 @@
         </section>
 
         <p class="instructions">Use <kbd>←</kbd>/<kbd>→</kbd> to move by step size. Tap once for one immediate step,
-            hold to repeat using the step interval. Use <kbd>↑</kbd>/<kbd>↓</kbd> to change the step interval by 0.1
-            seconds. Press <kbd>Space</kbd> to return to the origin (0, 0).</p>
+            hold to repeat using the step interval. Use <kbd>↑</kbd>/<kbd>↓</kbd> to change the step interval. Press <kbd>Space</kbd> to return to the origin (0, 0). Use <kbd>+</kbd>/<kbd>-</kbd> to adjust step size, <kbd>S</kbd> to toggle stop at critical points.</p>
         <div id="keyboard-focus-region" tabindex="0" class="visually-hidden"
             aria-label="Graph exploration area. Use arrow keys to move."></div>
     </main>
@@ -138,7 +132,6 @@
             var mainVisibilityBtn = document.getElementById("main-visibility-btn");
             var focusRegion = document.getElementById("keyboard-focus-region");
             var stepInput = document.getElementById("step-size-input");
-            var maxSoundDurationInput = document.getElementById("max-sound-duration-input");
             var bufferEl = document.getElementById("buffer-seconds");
             var stopCriticalToggle = document.getElementById("stop-critical-toggle");
             var graphState = window.AudibleMath.graphState;
@@ -287,28 +280,10 @@
                 if (criticalPoints) criticalPoints.run({ playTones: false });
             };
 
-            function formatDurationSeconds(ms) {
-                return (ms / 1000).toFixed(1);
-            }
-
-            function applyMaxSoundDurationFromInput() {
-                if (!maxSoundDurationInput || !sonification || !sonification.setMaxPlaybackMs) return;
-                var seconds = parseFloat(maxSoundDurationInput.value);
-                if (!isFinite(seconds) || seconds <= 0) {
-                    maxSoundDurationInput.value = formatDurationSeconds(sonification.getMaxPlaybackMs ? sonification.getMaxPlaybackMs() : DEFAULT_MAX_SOUND_DURATION_MS);
-                    return;
-                }
-                var appliedMs = sonification.setMaxPlaybackMs(seconds * 1000);
-                maxSoundDurationInput.value = formatDurationSeconds(appliedMs);
-            }
-
             function updateSettingsUi(stepSize, repeatDelayMs, shouldStopAtCritical) {
                 if (stepInput) stepInput.value = String(stepSize);
                 if (bufferEl) bufferEl.textContent = (repeatDelayMs / 1000).toFixed(1);
                 if (stopCriticalToggle) stopCriticalToggle.checked = !!shouldStopAtCritical;
-                if (maxSoundDurationInput && sonification && sonification.getMaxPlaybackMs) {
-                    maxSoundDurationInput.value = formatDurationSeconds(sonification.getMaxPlaybackMs());
-                }
             }
 
             function playUiActionCue() {
@@ -327,10 +302,6 @@
                     if (!graphState.setCursorStep(stepInput.value)) stepInput.value = String(graphState.getCursorStep());
                 });
             }
-            if (maxSoundDurationInput) {
-                maxSoundDurationInput.addEventListener("change", applyMaxSoundDurationFromInput);
-                maxSoundDurationInput.addEventListener("blur", applyMaxSoundDurationFromInput);
-            }
             if (stopCriticalToggle) {
                 stopCriticalToggle.addEventListener("change", function () {
                     graphState.setStopAtCriticalPoints(stopCriticalToggle.checked);
@@ -338,7 +309,7 @@
             }
 
             if (sonification && sonification.setMaxPlaybackMs) {
-                applyMaxSoundDurationFromInput();
+                sonification.setMaxPlaybackMs(DEFAULT_MAX_SOUND_DURATION_MS);
             }
 
             // --- Multi-function support ---
@@ -899,7 +870,7 @@
                     return {
                         currentFunction: exprInput.value || "",
                         stepSize: graphState.getCursorStep(),
-                        soundDuration: maxSoundDurationInput ? parseFloat(maxSoundDurationInput.value) : 0.5,
+                        soundDuration: 0.5,
                         stopAtCritical: graphState.getStopAtCriticalPoints(),
                         cursorX: xEl ? xEl.textContent : "0",
                         cursorY: yEl ? yEl.textContent : "0"
@@ -999,22 +970,7 @@
                         break;
 
                     case "set_sound_duration":
-                        var newDur;
-                        var currentDur = maxSoundDurationInput ? parseFloat(maxSoundDurationInput.value) : 0.5;
-                        if (cmd.relative === "shorter") {
-                            newDur = Math.max(0.1, currentDur / 2);
-                        } else if (cmd.relative === "longer") {
-                            newDur = currentDur * 2;
-                        } else {
-                            newDur = parseFloat(cmd.value);
-                        }
-                        if (isFinite(newDur) && newDur > 0 && maxSoundDurationInput) {
-                            maxSoundDurationInput.value = newDur.toFixed(1);
-                            maxSoundDurationInput.dispatchEvent(new Event("change"));
-                            speakFeedback("Sound duration set to " + newDur.toFixed(1) + " seconds");
-                        } else {
-                            speakFeedback("I couldn't set that sound duration.");
-                        }
+                        speakFeedback("Sound duration cannot be changed.");
                         break;
 
                     case "toggle_critical_points":

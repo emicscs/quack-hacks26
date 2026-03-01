@@ -15,6 +15,9 @@ import { GoogleGenAI } from "@google/genai";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Limit Gemini response length to ~2/3 of default (43616 → ~29000 tokens)
+const GEMINI_MAX_OUTPUT_TOKENS = 29000;
+
 app.use(express.json({ limit: "10mb" }));
 app.use(express.static(path.join(__dirname, "..")));
 
@@ -81,6 +84,7 @@ app.post("/api/describe", async (req, res) => {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents,
+      config: { maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS },
     });
 
     const text =
@@ -202,6 +206,7 @@ app.post("/api/voice-command", async (req, res) => {
           contents: userMessage,
           config: {
             systemInstruction: VOICE_COMMAND_PROMPT,
+            maxOutputTokens: GEMINI_MAX_OUTPUT_TOKENS,
           },
         });
         text = (response?.text ?? "").trim();

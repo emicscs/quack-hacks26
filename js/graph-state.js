@@ -11,7 +11,7 @@
     var domain = { min: -2 * Math.PI, max: 2 * Math.PI };
     var trueDomainBounds = { min: null, max: null };
     var step = 0.1;
-    var cursorStep = 0.1;
+    var cursorStep = 0.2;
     var repeatDelayMs = 200;
     var stopAtCriticalPoints = false;
     var currentParams = {};
@@ -724,6 +724,23 @@
                 e.preventDefault();
                 resumeAudioIfNeeded();
                 goToOrigin();
+                return;
+            }
+            if (e.key === "+" || e.key === "=") {
+                e.preventDefault();
+                var next = Math.round((cursorStep + 0.1) * 10) / 10;
+                setCursorStep(Math.min(10, next));
+                return;
+            }
+            if (e.key === "-") {
+                e.preventDefault();
+                var next = Math.round((cursorStep - 0.1) * 10) / 10;
+                setCursorStep(Math.max(0.1, next));
+                return;
+            }
+            if (e.key === "s" || e.key === "S") {
+                e.preventDefault();
+                setStopAtCriticalPoints(!stopAtCriticalPoints);
                 return;
             }
             if (e.key === "ArrowLeft" || e.key === "ArrowRight") {

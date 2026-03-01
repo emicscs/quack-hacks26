@@ -1,15 +1,12 @@
 /**
- * Voice intro – SpeechSynthesis for short intro before graph "plays".
- * Phase 1: "Graph of f(x) = … from x = … to …"
+ * Voice intro – SpeechSynthesis for short intro on load (instructions only, no graph details).
  */
 (function (global) {
     "use strict";
 
     function speakIntro(functionLabel, domain) {
         if (!window.speechSynthesis) return;
-        var domainMin = domain && domain.min != null ? domain.min.toFixed(1) : "?";
-        var domainMax = domain && domain.max != null ? domain.max.toFixed(1) : "?";
-        var text = "Graph of " + functionLabel + ", from x equals " + domainMin + " to " + domainMax + ". Use left and right arrows to move in steps. Use up and down arrows to adjust the step interval.";
+        var text = "Use left and right arrows to move along the graph. Use up and down arrows to adjust the step interval. Press Space to return to the origin.";
         var u = new SpeechSynthesisUtterance(text);
         u.rate = 0.95;
         u.pitch = 1;
