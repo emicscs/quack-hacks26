@@ -620,9 +620,12 @@
         criticalPoints = calculateCriticalPoints();
         var segmentedLine = buildLineWithBreaks();
         var mainColor = (options.mainTraceColor !== undefined) ? options.mainTraceColor : "#e8a84a";
+        var mainVisible = options.mainTraceVisible !== false;
+        var traceX = mainVisible ? segmentedLine.x : [];
+        var traceY = mainVisible ? segmentedLine.y : [];
         var trace = {
-            x: segmentedLine.x,
-            y: segmentedLine.y,
+            x: traceX,
+            y: traceY,
             mode: "lines",
             type: "scatter",
             name: "f(x)",
