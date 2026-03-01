@@ -385,7 +385,7 @@
             // ── Graph rendering ──
 
             var STEP = 0.1;
-            var DOMAIN = { min: -2 * Math.PI, max: 2 * Math.PI };
+            var DOMAIN = graphState.getViewWindow ? graphState.getViewWindow() : { min: -2 * Math.PI, max: 2 * Math.PI };
 
             function critLabel(type) {
                 if (type === "max") return "local max";
@@ -405,6 +405,8 @@
                 if (typeof Plotly === "undefined") return;
                 var graphDiv = document.getElementById("graph");
                 if (!graphDiv) return;
+                var activeWindow = graphState.getViewWindow ? graphState.getViewWindow() : DOMAIN;
+                DOMAIN = { min: activeWindow.min, max: activeWindow.max };
 
                 var visible = getVisible();
                 var traces = [];
@@ -486,7 +488,13 @@
                     plot_bgcolor: "#252525",
                     font: { color: "#e8e8e8", size: 12 },
                     hovermode: "closest",
-                    xaxis: { title: "x", gridcolor: "#333", zerolinecolor: "#555", showspikes: false },
+                    xaxis: {
+                        title: "x",
+                        gridcolor: "#333",
+                        zerolinecolor: "#555",
+                        showspikes: false,
+                        range: [DOMAIN.min, DOMAIN.max]
+                    },
                     yaxis: { title: "y", gridcolor: "#333", zerolinecolor: "#555", showspikes: false },
                     margin: { t: 40, r: 40, b: 50, l: 60 },
                     showlegend: true,
@@ -497,11 +505,14 @@
 
                 var first = visible[0];
                 if (first) {
-                    graphState.setFunction(first.expr);
+                    graphState.setFunction(first.expr, { preserveView: true, preserveCursor: true });
+                    if (graphState.setFunctionParams) graphState.setFunctionParams(first.params);
                 } else {
-                    graphState.setFunction("0");
+                    graphState.setFunction("0", { preserveView: true, preserveCursor: true });
+                    if (graphState.setFunctionParams) graphState.setFunctionParams({});
                 }
                 graphState.updateCursorDisplay();
+                if (graphState.updatePlotlyCursor) graphState.updatePlotlyCursor();
             }
 
             // ── Catalog fills a new row ──
@@ -536,6 +547,10 @@
 
             graphState.onCursorChange = criticalPoints ? criticalPoints.cursorHandler : function (x, y, isValid) {
                 sonification.setFrequencyFromY(y, isValid);
+            };
+            graphState.onViewWindowChange = function (minX, maxX) {
+                DOMAIN = { min: minX, max: maxX };
+                renderGraph();
             };
 
             function formatDurationSeconds(ms) {

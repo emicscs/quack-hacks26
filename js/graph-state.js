@@ -9,16 +9,19 @@
 
     var currentExpr = "sin(x)";
     var domain = { min: -2 * Math.PI, max: 2 * Math.PI };
+    var trueDomainBounds = { min: null, max: null };
     var step = 0.1;
     var cursorStep = 1;
     var repeatDelayMs = 200;
     var stopAtCriticalPoints = false;
+    var currentParams = {};
     var currentX = 0;
     var dataXY = { x: [], y: [] };
     var criticalPoints = [];
     var hoverPoint = null;
     var onCursorChange = function () { };
     var onSettingsChange = function () { };
+    var onViewWindowChange = function () { };
 
     var REPEAT_DELAY_MIN_MS = 100;
     var REPEAT_DELAY_MAX_MS = 2000;
@@ -28,43 +31,157 @@
     var delayTimerId = null;
     var activeNavKey = null;
     var activeDelayKey = null;
+    var blockedCuePlayedForActiveNav = false;
+    var PAN_EDGE_RATIO = 0.15;
+    var PAN_SHIFT_RATIO = 0.6;
+    var NAV_PROBE_STEPS = 8;
 
     var catalogDomains = {
-        "sin(x)": { min: -2 * Math.PI, max: 2 * Math.PI },
-        "x^2": { min: -5, max: 5 },
-        "1/x": { min: -5, max: 5 },
-        "x": { min: -5, max: 5 },
-        "sqrt(x)": { min: 0, max: 10 }
+        "sin(x)": { viewMin: -2 * Math.PI, viewMax: 2 * Math.PI, min: null, max: null },
+        "x^2": { viewMin: -5, viewMax: 5, min: null, max: null },
+        "1/x": { viewMin: -5, viewMax: 5, min: null, max: null },
+        "x": { viewMin: -5, viewMax: 5, min: null, max: null },
+        "sqrt(x)": { viewMin: 0, viewMax: 10, min: 0, max: null },
+        "e^x": { viewMin: -5, viewMax: 5, min: null, max: null }
     };
 
-    function setFunction(expr) {
+    function refreshSampledData() {
+        dataXY = mathEngine.sample(currentExpr, domain.min, domain.max, step, currentParams);
+    }
+
+    function domainPresetFor(expr) {
+        if (catalogDomains[expr]) return catalogDomains[expr];
+        if (/^sqrt\s*\(/i.test(expr)) return { viewMin: 0, viewMax: 10, min: 0, max: null };
+        return { viewMin: -5, viewMax: 5, min: null, max: null };
+    }
+
+    function clampToTrueDomain(x) {
+        if (typeof trueDomainBounds.min === "number" && isFinite(trueDomainBounds.min) && x < trueDomainBounds.min) return trueDomainBounds.min;
+        if (typeof trueDomainBounds.max === "number" && isFinite(trueDomainBounds.max) && x > trueDomainBounds.max) return trueDomainBounds.max;
+        return x;
+    }
+
+    function setFunction(expr, options) {
+        options = options || {};
         currentExpr = expr;
-        domain = catalogDomains[expr] || { min: -5, max: 5 };
-        dataXY = mathEngine.sample(currentExpr, domain.min, domain.max, step);
-        currentX = domain.min;
+        var preset = domainPresetFor(expr);
+        trueDomainBounds.min = preset.min;
+        trueDomainBounds.max = preset.max;
+        if (!options.preserveView) {
+            domain.min = preset.viewMin;
+            domain.max = preset.viewMax;
+        }
+        if (!options.preserveCursor) {
+            currentX = clampToTrueDomain(domain.min);
+        } else {
+            currentX = clampToTrueDomain(currentX);
+        }
+        refreshSampledData();
+    }
+
+    function setFunctionParams(params) {
+        currentParams = (params && typeof params === "object") ? Object.assign({}, params) : {};
+        refreshSampledData();
     }
 
     function getYAt(x) {
-        var y = mathEngine.evaluate(currentExpr, x);
+        var y = mathEngine.evaluate(currentExpr, x, currentParams);
         return typeof y === "number" && isFinite(y) ? y : NaN;
     }
 
+    function playBlockedNavigationCue() {
+        var s = global.AudibleMath && global.AudibleMath.sonification;
+        if (s && typeof s.playBlockedCue === "function") s.playBlockedCue();
+    }
+
+    function notifyBlockedNavigation() {
+        if (activeNavKey) {
+            if (blockedCuePlayedForActiveNav) return;
+            blockedCuePlayedForActiveNav = true;
+        }
+        playBlockedNavigationCue();
+    }
+
+    function getBoundForDirection(direction) {
+        if (direction < 0 && typeof trueDomainBounds.min === "number" && isFinite(trueDomainBounds.min)) return trueDomainBounds.min;
+        if (direction > 0 && typeof trueDomainBounds.max === "number" && isFinite(trueDomainBounds.max)) return trueDomainBounds.max;
+        return null;
+    }
+
+    function resolveNextX(delta) {
+        if (!delta) return null;
+        var direction = delta < 0 ? -1 : 1;
+        var bound = getBoundForDirection(direction);
+        var candidate = currentX + delta;
+        if (bound !== null && ((direction < 0 && candidate < bound) || (direction > 0 && candidate > bound))) {
+            if (currentX === bound) return null;
+            candidate = bound;
+        }
+        if (!isNaN(getYAt(candidate))) return candidate;
+        var probeStep = Math.max(Math.abs(delta) * 0.5, step);
+        for (var i = 1; i <= NAV_PROBE_STEPS; i++) {
+            var probeX = candidate + direction * probeStep * i;
+            if (bound !== null && ((direction < 0 && probeX < bound) || (direction > 0 && probeX > bound))) break;
+            if (!isNaN(getYAt(probeX))) return probeX;
+        }
+        return null;
+    }
+
+    function setViewWindow(minX, maxX, shouldNotify) {
+        if (!(typeof minX === "number" && isFinite(minX) && typeof maxX === "number" && isFinite(maxX))) return false;
+        if (!(maxX > minX)) return false;
+        var width = maxX - minX;
+        if (typeof trueDomainBounds.min === "number" && isFinite(trueDomainBounds.min) && minX < trueDomainBounds.min) {
+            minX = trueDomainBounds.min;
+            maxX = minX + width;
+        }
+        if (typeof trueDomainBounds.max === "number" && isFinite(trueDomainBounds.max) && maxX > trueDomainBounds.max) {
+            maxX = trueDomainBounds.max;
+            minX = maxX - width;
+        }
+        if (domain.min === minX && domain.max === maxX) return false;
+        domain.min = minX;
+        domain.max = maxX;
+        refreshSampledData();
+        if (shouldNotify !== false) onViewWindowChange(domain.min, domain.max);
+        return true;
+    }
+
+    function panWindowIfNeeded(direction) {
+        if (!direction) return false;
+        var width = domain.max - domain.min;
+        if (!(width > 0)) return false;
+        var padding = width * PAN_EDGE_RATIO;
+        var nearRight = direction > 0 && currentX >= (domain.max - padding);
+        var nearLeft = direction < 0 && currentX <= (domain.min + padding);
+        if (!nearRight && !nearLeft) return false;
+        var shift = width * PAN_SHIFT_RATIO * (direction > 0 ? 1 : -1);
+        return setViewWindow(domain.min + shift, domain.max + shift, true);
+    }
+
     function moveCursor(delta) {
-        var newX = currentX + delta;
-        newX = Math.max(domain.min, Math.min(domain.max, newX));
-        if (newX === currentX) return;
+        var direction = delta < 0 ? -1 : (delta > 0 ? 1 : 0);
+        var newX = resolveNextX(delta);
+        if (newX === null) {
+            notifyBlockedNavigation();
+            return false;
+        }
         if (stopAtCriticalPoints) {
             var criticalX = findCriticalPointBetween(currentX, newX);
             if (criticalX !== null) {
                 newX = criticalX;
             }
         }
+        if (newX === currentX) return false;
         currentX = newX;
+        blockedCuePlayedForActiveNav = false;
+        panWindowIfNeeded(direction);
         var y = getYAt(currentX);
         var isValid = !isNaN(y);
         updateCursorDisplay();
         updatePlotlyCursor();
         onCursorChange(currentX, isValid ? y : 0, isValid);
+        return true;
     }
 
     function findCriticalPointBetween(fromX, toX) {
@@ -285,10 +402,13 @@
             line: { color: "#4a9eff", width: 2, dash: "dot" }
         }];
         if (typeof y === "number" && isFinite(y)) {
+            var xRange = (graphDiv.layout && graphDiv.layout.xaxis && graphDiv.layout.xaxis.range && graphDiv.layout.xaxis.range.length === 2)
+                ? graphDiv.layout.xaxis.range
+                : [domain.min, domain.max];
             shapes.push({
                 type: "line",
-                x0: domain.min,
-                x1: domain.max,
+                x0: xRange[0],
+                x1: xRange[1],
                 xref: "x",
                 y0: y,
                 y1: y,
@@ -474,7 +594,7 @@
 
     function drawGraph() {
         if (typeof Plotly === "undefined") return;
-        dataXY = mathEngine.sample(currentExpr, domain.min, domain.max, step);
+        refreshSampledData();
         criticalPoints = calculateCriticalPoints();
         var segmentedLine = buildLineWithBreaks();
         var trace = {
@@ -531,7 +651,7 @@
     }
 
     function init() {
-        setFunction(document.getElementById("function-catalog").value || "sin(x)");
+        setFunction(document.getElementById("function-catalog").value || "sin(x)", { preserveView: false, preserveCursor: false });
         notifySettingsChange();
 
         document.addEventListener("keydown", function (e) {
@@ -541,6 +661,7 @@
                 if (e.repeat || activeNavKey === e.key) return;
                 resumeAudioIfNeeded();
                 activeNavKey = e.key;
+                blockedCuePlayedForActiveNav = false;
                 moveCursor(navDeltaForKey(e.key));
                 startNavRepeat(e.key);
             } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
@@ -558,6 +679,7 @@
         document.addEventListener("keyup", function (e) {
             if (e.key === activeNavKey) {
                 activeNavKey = null;
+                blockedCuePlayedForActiveNav = false;
                 clearNavTimer();
             }
             if (e.key === activeDelayKey) {
@@ -570,9 +692,13 @@
     global.AudibleMath = global.AudibleMath || {};
     global.AudibleMath.graphState = {
         setFunction: setFunction,
+        setFunctionParams: setFunctionParams,
         moveCursor: moveCursor,
         drawGraph: drawGraph,
         updateCursorDisplay: updateCursorDisplay,
+        updatePlotlyCursor: updatePlotlyCursor,
+        setViewWindow: setViewWindow,
+        getViewWindow: function () { return { min: domain.min, max: domain.max }; },
         getYAt: getYAt,
         setCursorStep: setCursorStep,
         getCursorStep: getCursorStep,
@@ -590,6 +716,8 @@
         get onCursorChange() { return onCursorChange; },
         set onCursorChange(f) { onCursorChange = f; },
         get onSettingsChange() { return onSettingsChange; },
-        set onSettingsChange(f) { onSettingsChange = f; }
+        set onSettingsChange(f) { onSettingsChange = f; },
+        get onViewWindowChange() { return onViewWindowChange; },
+        set onViewWindowChange(f) { onViewWindowChange = typeof f === "function" ? f : function () { }; }
     };
 })(typeof window !== "undefined" ? window : this);
