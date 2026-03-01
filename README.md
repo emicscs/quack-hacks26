@@ -1,37 +1,120 @@
-# Audible Math
+# Euler's Vision
 
-A web-based mathematical sonification engine that turns function graphs into sound. Pitch corresponds to the function’s y-value; you move along the x-axis with the arrow keys. The app includes **Graph Mode** (sonified exploration with critical-point feedback), a **Desmos-style graphing calculator**, and an optional **Node backend** for AI-generated graph descriptions.
+Euler's Vision is a hackathon project that makes graph exploration more accessible by combining:
 
-## Features
+- visual graphing,
+- keyboard navigation,
+- real-time sonification,
+- and optional AI-generated spoken graph descriptions.
 
-- **Graph Mode** – Pick a function, explore with ← / →. Pitch reflects y; voice intro and critical-point sounds (minima, maxima, inflection) when the cursor crosses them.
-- **Critical point detector** – Marks local minima (green ▼), maxima (red ▲), and inflection points (blue ◆) on the graph; plays distinct beeps when you cross them. See [IMPLEMENTING_CRITICAL_POINTS.md](IMPLEMENTING_CRITICAL_POINTS.md) for integration details.
-- **Desmos-style calculator** (`desmos.html`) – Multiple expressions, Plotly graph, KaTeX rendering.
-- **Optional backend** – Express server that serves the app and provides `/api/describe` (Gemini) for generating spoken descriptions of equations and graph images.
+Users can enter one or more functions, move along the graph using arrow keys, and hear pitch and event cues for key mathematical behavior (minima, maxima, inflection points, intersections).
 
-## How to run
+---
 
-You must serve the project over **HTTP** (not `file://`) so CDN scripts, Web Audio, and (if used) the describe API work correctly.
+## Table of Contents
 
-### With the Node backend (recommended)
+- [Hackathon Overview](#hackathon-overview)
+- [What It Does](#what-it-does)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Setup](#setup)
+- [Run](#run)
+  - [Option A: Full mode (recommended)](#option-a-full-mode-recommended)
+  - [Option B: Static mode (no AI descriptions)](#option-b-static-mode-no-ai-descriptions)
+- [Directions / How to Use](#directions--how-to-use)
+- [Feature Descriptions](#feature-descriptions)
+- [Controls](#controls)
+- [Troubleshooting](#troubleshooting)
 
-The backend serves the whole project and powers the **Describe function** feature (Gemini vision + spoken description). You need a **Gemini API key** for that.
+---
 
-**Setup (Gemini API key):**
+## Hackathon Overview
 
-1. Get a key at [Google AI Studio](https://aistudio.google.com/apikey).
-2. In the project, copy the example env file and add your key:
-   ```bash
-   cd server
-   cp .env.example .env
-   ```
-3. Edit `server/.env` and set:
-   ```bash
-   GEMINI_API_KEY=your_actual_key_here
-   ```
-   Do not commit `.env` (it is typically in `.gitignore`). The app reads the key from `server/.env` when the server starts.
+### Problem
+Graph-heavy math tools are mostly visual, which can make exploration difficult for blind and low-vision learners.
 
-**Run the server:**
+### Solution
+Euler's Vision translates graph behavior into sound while preserving familiar graphing interactions. It adds critical-point cues and optional spoken AI summaries so users can understand graph shape and behavior through multiple modalities.
+
+### Outcome
+A web app with:
+- sonified graph navigation,
+- multi-function plotting,
+- critical point and intersection cues,
+- and optional Gemini-powered graph narration.
+
+---
+
+## What It Does
+
+- Graphs mathematical functions in real time.
+- Lets users move along x with keyboard controls and hear y as pitch.
+- Detects and marks local minima, maxima, inflection points, and intersections.
+- Plays distinct sounds when crossing important points.
+- Supports multiple functions with visibility toggles.
+- Provides a **describe graph** action to generate spoken mathematical summaries via Gemini (when backend is enabled).
+
+---
+
+## Tech Stack
+
+- **Languages:** JavaScript, HTML, CSS
+- **Frontend:** Plotly.js, Math.js, KaTeX
+- **Audio:** Web Audio API, SpeechSynthesis API
+- **Backend (optional):** Node.js, Express, dotenv, `@google/genai`
+- **AI Model:** `gemini-3-flash-preview`
+
+---
+
+## Project Structure
+
+| Path | Purpose |
+|------|--------|
+| `index.html` | Landing page |
+| `graph-mode.html` | Main sonified exploration UI |
+| `desmos.html` | Multi-expression calculator-style graphing page |
+| `criticalPointDetector.js` | Critical point/intersection detection and audio cues |
+| `js/math-engine.js` | Expression normalization, parsing, evaluation, sampling |
+| `js/graph-state.js` | Graph state + cursor + keyboard navigation + Plotly draw loop |
+| `js/sonification.js` | Base pitch sonification and UI cue sounds |
+| `js/describe-api.js` | Frontend client for `/api/describe` |
+| `server/index.js` | Express server + Gemini description endpoint |
+
+---
+
+## Setup
+
+> Serve over **HTTP** (not `file://`) so audio/CDN/API features work correctly.
+
+### Prerequisites
+
+- Node.js 18+
+- npm
+
+### Optional AI setup (Gemini)
+
+1. Get a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey).
+2. Create environment file:
+
+```bash
+cd server
+cp .env.example .env
+```
+
+3. Add key in `server/.env`:
+
+```env
+GEMINI_API_KEY=your_actual_key_here
+PORT=3000
+```
+
+---
+
+## Run
+
+## Option A: Full mode (recommended)
+
+Runs frontend + backend + AI describe endpoint.
 
 ```bash
 cd server
@@ -39,66 +122,95 @@ npm install
 npm start
 ```
 
-Then open **http://localhost:3000** (or the port in `server/.env` via `PORT`). From there you can open `index.html`, `graph-mode.html`, or `desmos.html`.
+Open:
+- `http://localhost:3000/index.html`
+- `http://localhost:3000/graph-mode.html`
+- `http://localhost:3000/desmos.html`
 
-**Describe function:** In Graph Mode, use the “Describe function” button. The app sends your equation and a snapshot of the graph to Gemini (`gemini-3-flash-preview`), which returns a short mathematical description (type, bounds, asymptotes, etc.). **The audio you hear is read from that description** using the browser’s Speech Synthesis API (dictation/TTS). Debug output is printed in the **server console** after each describe request (equation, image size, full description).
-
-### Static only (no backend)
-
-If you don’t need the describe API, serve the project with any static server:
+## Option B: Static mode (no AI descriptions)
 
 ```bash
-# Python 3
+# from project root
 python3 -m http.server 8765
-
 # or
 npx serve -p 8765
 ```
 
-Then open **http://localhost:8765** and navigate to `index.html` or `graph-mode.html`. Graph Mode and the critical point detector work without the backend.
+Open:
+- `http://localhost:8765/index.html`
+- `http://localhost:8765/graph-mode.html`
 
-## Project structure
+---
 
-| Path | Purpose |
-|------|--------|
-| `index.html` | Landing page; link to Graph Mode |
-| `graph-mode.html` | Sonified graph exploration (Plotly, cursor, critical points) |
-| `desmos.html` | Desmos-style multi-expression graphing |
-| `criticalPointDetector.js` | Standalone critical-point detection, marks, and crossing sounds |
-| `js/math-engine.js` | Expression parsing and sampling (Math.js) |
-| `js/graph-state.js` | Graph state, cursor, Plotly updates for Graph Mode |
-| `js/sonification.js` | Web Audio pitch-from-y sonification |
-| `js/voice-intro.js` | Speech Synthesis intro for Graph Mode |
-| `js/describe-api.js` | Client for `POST /api/describe` |
-| `server/` | Express app: static site + `/api/describe` (Gemini) |
+## Directions / How to Use
 
-## Dependencies
+1. Open **Graph Mode**.
+2. Enter a function (examples: `sin(x)`, `x^2`, `|x|`, `sqrt(x)`).
+3. Use **left/right arrow keys** to move along the graph.
+4. Listen to:
+   - continuous pitch (mapped from y-value),
+   - special cues at minima/maxima/inflection/intersections.
+5. Add more functions and compare curves.
+6. Click **describe graph** (if backend is running) to hear an AI-generated spoken summary.
 
-### Frontend (CDN)
+---
 
-| Dependency | Use |
-|------------|-----|
-| **Plotly.js** | Graphing (Graph Mode, Desmos-style) |
-| **Math.js** | Parsing and evaluating expressions |
-| **KaTeX** | (Desmos-style only) Equation rendering |
+## Feature Descriptions
 
-Sound uses the browser **Web Audio API** and **Speech Synthesis API**; no extra frontend libraries.
+### 1) Sonified Graph Navigation
+- Cursor-based movement along x.
+- Y-value converted to pitch in real time.
+- Designed for keyboard-first graph exploration.
 
-### Backend (`server/`)
+### 2) Critical Point Feedback
+- Detects:
+  - local minima,
+  - local maxima,
+  - inflection points.
+- Adds visual markers and crossing sounds.
 
-- **Node.js** with `"type": "module"`
-- **express** – static files and `/api/describe`
-- **@google/genai** – Gemini for graph descriptions
-- **dotenv** – `GEMINI_API_KEY` from `server/.env`
+### 3) Multi-Function Graphing
+- Add multiple functions dynamically.
+- Toggle visibility per function.
+- Color-coded traces.
+- Intersection detection between visible functions.
 
-See `server/package.json` for versions.
+### 4) Describe Graph (AI)
+- Captures current graph image + equation(s).
+- Sends to `POST /api/describe`.
+- Gemini returns a plain-language math description.
+- Browser reads it aloud with SpeechSynthesis.
 
-## Graph Mode quick start
+---
 
-1. Open the app (via Node server or static server) and go to **Graph Mode** (from the landing page or `graph-mode.html`).
-2. Choose a function from the dropdown (e.g. **sin(x)**, **x²**).
-3. Use **←** and **→** to move along the graph. Pitch reflects the y-value.
-4. First key press may be needed to start audio (browser autoplay policy).
-5. When the cursor crosses a critical point, you’ll hear a distinct crossing sound; minima, maxima, and inflection points are marked on the graph.
+## Controls
 
-In the browser console you can toggle the critical-point detector: `criticalPoints.disable()` and `criticalPoints.enable()`.
+- **Left Arrow / Right Arrow:** move graph cursor
+- **Up Arrow / Down Arrow:** adjust step interval
+- **Step size input:** control movement increment
+- **Max sound duration:** cap continuous tone duration
+- **Stop at critical points:** navigation behavior option
+- **Function visibility toggles:** show/hide traces
+- **describe graph:** generate spoken graph description (backend mode)
+
+---
+
+## Troubleshooting
+
+- **No sound at first:**  
+  Browser autoplay restrictions may require an initial user interaction.
+
+- **Describe graph fails:**  
+  Ensure backend is running and `GEMINI_API_KEY` is set in `server/.env`.
+
+- **Graph not rendering correctly:**  
+  Confirm you are using `http://...`, not opening HTML directly with `file://`.
+
+- **Unexpected expression behavior:**  
+  Use standard forms (`sin(x)`, `x^2`, `sqrt(x)`, `abs(x)`) or shorthand supported by the parser (`|x|`, `π`, `√x`).
+
+---
+
+## Hackathon Tagline
+
+**Euler's Vision** helps users hear the shape of mathematics.
