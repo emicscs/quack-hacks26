@@ -10,7 +10,7 @@
  *
  * Options: getData, markPoints, playTones, clearMarks, onDetect, onMarkPoints,
  *   markerSize, beepDuration, beepGap, freqMin, freqMax, freqInflection,
- *   initialCursorX, getCursorX, xTolerance.
+ *   initialCursorX, getCursorX, xTolerance, soundDirectory, soundUrls.
  */
 (function (global) {
     "use strict";
@@ -155,13 +155,93 @@
             osc.stop(when + duration);
         }
 
-        var t = ctx.currentTime;
-        points.minima.forEach(function () { beep(freqMin, t); t += duration + gap; });
-        points.maxima.forEach(function () { beep(freqMax, t); t += duration + gap; });
-        points.inflection.forEach(function () { beep(freqInf, t); t += duration + gap; });
+        var useCustom = (options.soundDirectory || options.soundUrls) && crossingState.soundBuffers;
+        var introCtx = options.audioContext || crossingState.audioContext || ctx;
+        var t = introCtx.currentTime;
+        points.minima.forEach(function () {
+            if (useCustom && crossingState.soundBuffers["intro-min"]) playBufferSound(introCtx, crossingState.soundBuffers["intro-min"], t, 0.15);
+            else beep(freqMin, t);
+            t += duration + gap;
+        });
+        points.maxima.forEach(function () {
+            if (useCustom && crossingState.soundBuffers["intro-max"]) playBufferSound(introCtx, crossingState.soundBuffers["intro-max"], t, 0.15);
+            else beep(freqMax, t);
+            t += duration + gap;
+        });
+        points.inflection.forEach(function () {
+            if (useCustom && crossingState.soundBuffers["intro-inflection"]) playBufferSound(introCtx, crossingState.soundBuffers["intro-inflection"], t, 0.15);
+            else beep(freqInf, t);
+            t += duration + gap;
+        });
     }
 
-    var crossingState = { lastCursorX: null, points: null, audioContext: null, xTolerance: 0.06 };
+    var crossingState = { lastCursorX: null, points: null, audioContext: null, xTolerance: 0.06, soundBuffers: {} };
+    var SOUND_KEYS = ["intro-min", "intro-max", "intro-inflection", "crossing-min", "crossing-max", "crossing-inflection"];
+    var SOUND_EXTENSIONS = ["mp3", "wav", "ogg"];
+
+    function getSoundUrls(key, options) {
+        if (options.soundUrls && typeof options.soundUrls[key] === "string") return [options.soundUrls[key]];
+        var dir = options.soundDirectory;
+        if (typeof dir !== "string" || !dir.length) return [];
+        dir = dir.replace(/\/$/, "");
+        var base = dir + "/" + key;
+        return SOUND_EXTENSIONS.map(function (ext) { return base + "." + ext; });
+    }
+
+    function loadSoundBuffer(ctx, urlList, key, cache, callback) {
+        if (!urlList || !urlList.length || !ctx.decodeAudioData) return callback();
+        var idx = 0;
+        function tryNext() {
+            if (idx >= urlList.length) return callback();
+            var url = urlList[idx++];
+            var req = new XMLHttpRequest();
+            req.open("GET", url, true);
+            req.responseType = "arraybuffer";
+            req.onload = function () {
+                if (req.status !== 200) return tryNext();
+                ctx.decodeAudioData(req.response, function (buf) { cache[key] = buf; callback(); }, tryNext);
+            };
+            req.onerror = tryNext;
+            req.send();
+        }
+        tryNext();
+    }
+
+    function preloadSounds(options, callback) {
+        var ctx = options.audioContext || crossingState.audioContext;
+        if (!ctx) {
+            ctx = new AudioContext();
+            crossingState.audioContext = ctx;
+        }
+        var cache = crossingState.soundBuffers;
+        var keys = SOUND_KEYS.slice();
+        var urls = [];
+        for (var i = 0; i < keys.length; i++) {
+            var u = getSoundUrls(keys[i], options);
+            if (u.length) urls.push({ key: keys[i], urlList: u });
+        }
+        if (!urls.length) return callback && callback();
+        var left = urls.length;
+        urls.forEach(function (item) {
+            loadSoundBuffer(ctx, item.urlList, item.key, cache, function () {
+                left--;
+                if (left === 0 && callback) callback();
+            });
+        });
+    }
+
+    function playBufferSound(ctx, buffer, when, gain) {
+        if (!ctx || !buffer) return;
+        if (ctx.state === "suspended") ctx.resume();
+        var src = ctx.createBufferSource();
+        var g = ctx.createGain();
+        src.buffer = buffer;
+        src.connect(g);
+        g.connect(ctx.destination);
+        g.gain.setValueAtTime(Number.isFinite(gain) ? gain : 0.4, when);
+        src.start(when);
+        src.stop(when + buffer.duration);
+    }
 
     function playCrossingSound(type, options) {
         if (!AudioContext) return;
@@ -172,6 +252,14 @@
             crossingState.audioContext = ctx;
         }
         if (ctx.state === "suspended") ctx.resume();
+
+        var crossingKey = "crossing-" + type;
+        var buf = crossingState.soundBuffers && crossingState.soundBuffers[crossingKey];
+        if (buf && (options.soundDirectory || options.soundUrls)) {
+            var gain = Number.isFinite(options.crossingGain) ? options.crossingGain : 0.4;
+            playBufferSound(ctx, buf, ctx.currentTime, gain);
+            return;
+        }
 
         var duration = Number.isFinite(options.crossingDuration) ? options.crossingDuration : 0.28;
         var gain = Number.isFinite(options.crossingGain) ? options.crossingGain : 0.4;
@@ -316,6 +404,8 @@
 
         if (options.clearMarks !== false) removePlotlyMarks(container);
 
+        if (options.soundDirectory || options.soundUrls) preloadSounds(options);
+
         var points;
         if (data.criticalPoints &&
             Array.isArray(data.criticalPoints.minima) &&
@@ -360,6 +450,8 @@
                 if (typeof options.getData === "function") attachOptions.getData = options.getData;
                 if (typeof getCursorX === "function") attachOptions.getCursorX = getCursorX;
                 if (runtimeOpts && runtimeOpts.playTones === false) attachOptions.playTones = false;
+                if (options.soundDirectory) attachOptions.soundDirectory = options.soundDirectory;
+                if (options.soundUrls) attachOptions.soundUrls = options.soundUrls;
                 attach(graphSelector, attachOptions);
             };
             if (attachDelayMs > 0) setTimeout(runAttach, attachDelayMs);

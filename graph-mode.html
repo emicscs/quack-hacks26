@@ -13,8 +13,9 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
 </head>
 
-<body>
-    <main role="main" aria-label="Graph mode – explore function with sound">
+<body class="graph-mode-page">
+    <div class="graph-mode-layout">
+    <main role="main" aria-label="Graph mode – explore function with sound" class="graph-mode-main">
         <h1>Graph Mode</h1>
 
         <section aria-label="Expression entry" class="expression-entry">
@@ -69,6 +70,38 @@
             aria-label="Graph exploration area. Use arrow keys to move."></div>
     </main>
 
+    <aside class="sounds-directory" aria-label="Sounds you will hear">
+        <h2 class="sounds-directory__title">Sounds you'll hear</h2>
+        <p class="sounds-directory__intro">As you move along the graph with the arrow keys, you'll hear pitch for the curve and these cues at critical points.</p>
+        <ul class="sounds-directory__list">
+            <li class="sounds-directory__item sounds-directory__item--min">
+                <span class="sounds-directory__marker" aria-hidden="true">▼</span>
+                <div class="sounds-directory__content">
+                    <strong>Local minimum</strong>
+                    <span class="sounds-directory__when">Short beep when the graph loads; stronger sound when you cross it.</span>
+                </div>
+                <button type="button" class="sounds-directory__play" data-sound-type="min" title="Play sound">Play</button>
+            </li>
+            <li class="sounds-directory__item sounds-directory__item--max">
+                <span class="sounds-directory__marker" aria-hidden="true">▲</span>
+                <div class="sounds-directory__content">
+                    <strong>Local maximum</strong>
+                    <span class="sounds-directory__when">Short beep when the graph loads; stronger sound when you cross it.</span>
+                </div>
+                <button type="button" class="sounds-directory__play" data-sound-type="max" title="Play sound">Play</button>
+            </li>
+            <li class="sounds-directory__item sounds-directory__item--inflection">
+                <span class="sounds-directory__marker" aria-hidden="true">◆</span>
+                <div class="sounds-directory__content">
+                    <strong>Inflection point</strong>
+                    <span class="sounds-directory__when">Short beep when the graph loads; stronger sound when you cross it.</span>
+                </div>
+                <button type="button" class="sounds-directory__play" data-sound-type="inflection" title="Play sound">Play</button>
+            </li>
+        </ul>
+    </aside>
+    </div>
+
     <script src="js/math-engine.js"></script>
     <script src="js/graph-state.js"></script>
     <script src="js/sonification.js"></script>
@@ -105,9 +138,31 @@
                     return out;
                 },
                 getCursorX: function () { return graphState.currentX; },
-                onCursorChange: function (x, y, isValid) { sonification.setFrequencyFromY(y, isValid); }
+                onCursorChange: function (x, y, isValid) { sonification.setFrequencyFromY(y, isValid); },
+                soundDirectory: "sounds"
             });
             if (criticalPoints) window.criticalPoints = criticalPoints;
+
+            var criticalPointOptions = { soundDirectory: "sounds" };
+            var soundLabels = { min: "local minimum", max: "local maximum", inflection: "inflection point" };
+            document.querySelectorAll(".sounds-directory__play").forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    var type = this.getAttribute("data-sound-type");
+                    if (!type || !window.CriticalPointDetector || !CriticalPointDetector.playCrossingSound) return;
+                    var label = soundLabels[type] || type;
+                    var text = "Playing " + label + " sound.";
+                    if (window.speechSynthesis) {
+                        window.speechSynthesis.cancel();
+                        var u = new SpeechSynthesisUtterance(text);
+                        u.onend = function () {
+                            CriticalPointDetector.playCrossingSound(type, criticalPointOptions);
+                        };
+                        window.speechSynthesis.speak(u);
+                    } else {
+                        CriticalPointDetector.playCrossingSound(type, criticalPointOptions);
+                    }
+                });
+            });
 
             function renderLatex(text) {
                 if (!exprPreview) return;

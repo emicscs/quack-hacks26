@@ -1,0 +1,14 @@
+{
+  "description": "Sound manifest for critical point detector. Optional custom files override built-in tones.",
+  "intro": {
+    "min": { "file": "intro-min", "description": "Short beep per local minimum when graph loads" },
+    "max": { "file": "intro-max", "description": "Short beep per local maximum when graph loads" },
+    "inflection": { "file": "intro-inflection", "description": "Short beep per inflection point when graph loads" }
+  },
+  "crossing": {
+    "min": { "file": "crossing-min", "description": "Sound when cursor crosses a local minimum" },
+    "max": { "file": "crossing-max", "description": "Sound when cursor crosses a local maximum" },
+    "inflection": { "file": "crossing-inflection", "description": "Sound when cursor crosses an inflection point" }
+  },
+  "extensions": [".mp3", ".wav", ".ogg"]
+}
