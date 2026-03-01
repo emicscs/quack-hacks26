@@ -619,13 +619,14 @@
         refreshSampledData();
         criticalPoints = calculateCriticalPoints();
         var segmentedLine = buildLineWithBreaks();
+        var mainColor = (options.mainTraceColor !== undefined) ? options.mainTraceColor : "#e8a84a";
         var trace = {
             x: segmentedLine.x,
             y: segmentedLine.y,
             mode: "lines",
             type: "scatter",
             name: "f(x)",
-            line: { color: "#e8a84a", width: 2 },
+            line: { color: mainColor, width: 2 },
             connectgaps: false,
             hovertemplate: "(%{x:.2f}, %{y:.2f})<extra></extra>"
         };

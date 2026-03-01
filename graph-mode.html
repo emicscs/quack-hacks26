@@ -27,60 +27,63 @@
         </header>
 
         <p class="instructions graph-mode-instructions">Adjust along the graph with <kbd>←</kbd>/<kbd>→</kbd> keys.</p>
-        <div class="graph-mode-graph-wrap">
-            <div id="graph" role="img" aria-label="Graph of function"></div>
-            <section aria-live="polite" aria-atomic="true" id="live-region" class="live-region">
-                Current: x = <span id="current-x">0</span>, y = <span id="current-y">0</span>
-            </section>
+        <div class="graph-mode-main-row">
+            <div class="graph-mode-controls-column">
+                <section aria-label="Expression entry" class="expression-entry graph-mode-card">
+                    <h2 class="graph-mode-card__title">Function</h2>
+                    <div class="expression-entry__row">
+                        <input type="text" id="expr-input" class="desmos-row__input" placeholder="y = 2x^2 + 3, y = a sin(x), y = e^x" autocomplete="off" spellcheck="false" aria-label="Function expression" />
+                        <select id="function-catalog" aria-describedby="catalog-desc" title="Quick examples">
+                            <option value="">Examples...</option>
+                            <option value="sin(x)">sin(x)</option>
+                            <option value="x^2">x²</option>
+                            <option value="1/x">1/x</option>
+                            <option value="sqrt(x)">√x</option>
+                            <option value="e^x">eˣ</option>
+                        </select>
+                    </div>
+                    <div id="expr-preview" class="desmos-row__preview desmos-row__preview--empty"></div>
+                    <div id="expr-error" class="desmos-row__error" style="display:none" role="alert"></div>
+                    <div id="expr-sliders" class="desmos-row__sliders"></div>
+                    <span id="catalog-desc" class="visually-hidden">Choose a function to graph and sonify.</span>
+                </section>
+
+                <section aria-label="Additional expressions" class="expression-list-section graph-mode-card">
+                    <div class="expression-list-header">
+                        <span>Additional Functions</span>
+                        <button type="button" id="add-expr-btn" class="add-expr-btn" title="Add another function">+ Add</button>
+                    </div>
+                    <div id="extra-expression-rows"></div>
+                </section>
+
+                <section aria-label="Navigation settings" class="graph-mode-card">
+                    <h2 class="graph-mode-card__title">Navigation &amp; Sound</h2>
+                    <div class="graph-mode-settings">
+                        <div class="graph-mode-setting">
+                            <label for="step-size-input">Step size</label>
+                            <input id="step-size-input" type="number" min="0.1" step="0.1" value="1" inputmode="decimal">
+                        </div>
+                        <div class="graph-mode-setting">
+                            <label for="max-sound-duration-input">Max sound duration (s)</label>
+                            <input id="max-sound-duration-input" type="number" min="0.1" step="0.1" value="0.5" inputmode="decimal">
+                        </div>
+                        <p class="graph-mode-setting-full">Step interval: <span id="buffer-seconds">0.2</span>s (adjust with <kbd>↑</kbd>/<kbd>↓</kbd> keys)</p>
+                        <label for="stop-critical-toggle" class="graph-mode-setting-full graph-mode-setting-check">
+                            <input id="stop-critical-toggle" type="checkbox">
+                            Stop at critical points
+                        </label>
+                    </div>
+                </section>
+            </div>
+            <div class="graph-mode-graph-wrap">
+                <div id="graph" role="img" aria-label="Graph of function"></div>
+                <section aria-live="polite" aria-atomic="true" id="live-region" class="live-region">
+                    Current: x = <span id="current-x">0</span>, y = <span id="current-y">0</span>
+                </section>
+            </div>
         </div>
 
-        <section aria-label="Expression entry" class="expression-entry graph-mode-card">
-            <h2 class="graph-mode-card__title">Function</h2>
-            <div class="expression-entry__row">
-                <input type="text" id="expr-input" class="desmos-row__input" placeholder="y = 2x^2 + 3, y = a sin(x), y = e^x" autocomplete="off" spellcheck="false" aria-label="Function expression" />
-                <select id="function-catalog" aria-describedby="catalog-desc" title="Quick examples">
-                    <option value="">Examples...</option>
-                    <option value="sin(x)">sin(x)</option>
-                    <option value="x^2">x²</option>
-                    <option value="1/x">1/x</option>
-                    <option value="sqrt(x)">√x</option>
-                    <option value="e^x">eˣ</option>
-                </select>
-            </div>
-            <div id="expr-preview" class="desmos-row__preview desmos-row__preview--empty"></div>
-            <div id="expr-error" class="desmos-row__error" style="display:none" role="alert"></div>
-            <div id="expr-sliders" class="desmos-row__sliders"></div>
-            <span id="catalog-desc" class="visually-hidden">Choose a function to graph and sonify.</span>
-        </section>
-
-        <section aria-label="Additional expressions" class="expression-list-section graph-mode-card">
-            <div class="expression-list-header">
-                <span>Additional Functions</span>
-                <button type="button" id="add-expr-btn" class="add-expr-btn" title="Add another function">+ Add</button>
-            </div>
-            <div id="extra-expression-rows"></div>
-        </section>
-
-        <section aria-label="Navigation settings" class="graph-mode-card">
-            <h2 class="graph-mode-card__title">Navigation &amp; Sound</h2>
-            <div class="graph-mode-settings">
-                <div class="graph-mode-setting">
-                    <label for="step-size-input">Step size</label>
-                    <input id="step-size-input" type="number" min="0.1" step="0.1" value="1" inputmode="decimal">
-                </div>
-                <div class="graph-mode-setting">
-                    <label for="max-sound-duration-input">Max sound duration (s)</label>
-                    <input id="max-sound-duration-input" type="number" min="0.1" step="0.1" value="0.5" inputmode="decimal">
-                </div>
-                <p class="graph-mode-setting-full">Step interval: <span id="buffer-seconds">0.2</span>s (adjust with <kbd>↑</kbd>/<kbd>↓</kbd> keys)</p>
-                <label for="stop-critical-toggle" class="graph-mode-setting-full graph-mode-setting-check">
-                    <input id="stop-critical-toggle" type="checkbox">
-                    Stop at critical points
-                </label>
-            </div>
-        </section>
-
-        <section aria-label="Sound directory" class="sound-directory graph-mode-card">
+        <section aria-label="Sound directory" class="sound-directory graph-mode-card graph-mode-sound-directory-full">
             <h2 class="sound-directory__title graph-mode-card__title">Sound Directory</h2>
             <p class="sound-directory__desc">Preview the sounds used for each point type:</p>
             <div class="sound-directory__buttons">
@@ -317,6 +320,7 @@
 
             // --- Multi-function support ---
             var EXTRA_COLORS = ["#e74c3c", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c", "#e91e63", "#00bcd4"];
+            var mainExpressionColor = "#e8a84a";
             var extraEntries = [];
             var extraNextId = 0;
             var extraRowsContainer = document.getElementById("extra-expression-rows");
@@ -439,6 +443,7 @@
             var _origDrawGraph = graphState.drawGraph;
             graphState.drawGraph = function (options) {
                 options = options || {};
+                options.mainTraceColor = mainExpressionColor;
                 var origAfter = options.onAfterDraw;
                 options.onAfterDraw = function () {
                     if (origAfter) origAfter();
@@ -506,9 +511,13 @@
                     var prevMainInput = exprInput.value;
                     var prevMainExpr = currentMainExpr;
                     var prevMainParams = Object.assign({}, currentParams);
+                    var entryColor = entry.color;
                     entry.input = prevMainInput;
                     entry.expr = prevMainExpr;
                     entry.params = prevMainParams;
+                    entry.color = mainExpressionColor;
+                    mainExpressionColor = entryColor;
+                    row.querySelector(".expr-row__color").style.background = entry.color;
                     inputEl.value = prevMainInput;
                     exprInput.value = entryInput;
                     currentParams = entryParams;
