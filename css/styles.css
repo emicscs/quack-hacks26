@@ -21,9 +21,30 @@ body {
     min-height: 100vh;
 }
 
+/* Graph Mode: main + sounds directory side by side */
+.graph-mode-page {
+    padding: 1rem;
+}
+.graph-mode-layout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    max-width: 72rem;
+    margin: 0 auto;
+    align-items: flex-start;
+}
+.graph-mode-main {
+    flex: 1 1 28rem;
+    min-width: 0;
+}
+
 main {
     max-width: 48rem;
     margin: 0 auto;
+}
+.graph-mode-page main.graph-mode-main {
+    max-width: none;
+    margin: 0;
 }
 
 h1 {
@@ -216,4 +237,81 @@ kbd {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+}
+
+/* Sounds directory (Graph Mode sidebar) */
+.sounds-directory {
+    flex: 0 0 18rem;
+    max-width: 22rem;
+    padding: 1rem 1.25rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid #333;
+    border-radius: 0.5rem;
+}
+.sounds-directory__title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem;
+    color: var(--fg);
+}
+.sounds-directory__intro {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin: 0 0 1rem;
+    line-height: 1.4;
+}
+.sounds-directory__list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.sounds-directory__item {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+.sounds-directory__item:last-child {
+    margin-bottom: 0;
+}
+.sounds-directory__marker {
+    flex-shrink: 0;
+    width: 1.5rem;
+    text-align: center;
+    font-size: 0.75rem;
+}
+.sounds-directory__content {
+    flex: 1;
+    min-width: 0;
+}
+.sounds-directory__item--min .sounds-directory__marker { color: #2ecc71; }
+.sounds-directory__item--max .sounds-directory__marker { color: #e74c3c; }
+.sounds-directory__item--inflection .sounds-directory__marker { color: #3498db; }
+.sounds-directory__item strong {
+    display: block;
+    margin-bottom: 0.15rem;
+}
+.sounds-directory__when {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-weight: normal;
+}
+.sounds-directory__play {
+    flex-shrink: 0;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
+    font-family: inherit;
+    border-radius: 0.25rem;
+    border: 1px solid var(--muted);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--fg);
+    cursor: pointer;
+}
+.sounds-directory__play:hover,
+.sounds-directory__play:focus {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--accent);
+    outline: none;
 }
