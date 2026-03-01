@@ -113,29 +113,16 @@
         }
 
         var d2Prev = null;
-        // #region agent log
         var yRange = n >= 2 ? Math.abs((Math.max.apply(null, y) - Math.min.apply(null, y))) || 1 : 1;
-        var sampleD2 = [];
-        for (var si = 1; si < Math.min(6, n - 1); si++) {
-            sampleD2.push(y[si + 1] - 2 * y[si] + y[si - 1]);
-        }
-        fetch('http://127.0.0.1:7935/ingest/fcb62245-938e-461a-9b82-63c8520f6360',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f17b4e'},body:JSON.stringify({sessionId:'f17b4e',location:'criticalPointDetector.js:inflection_loop',message:'findCriticalPoints inflection input',data:{n: n, yRange: yRange, sampleD2: sampleD2},timestamp:Date.now(),hypothesisId:'H1'})}).catch(function(){});
-        // #endregion
         var d2Tolerance = 1e-10 * (yRange + 1);
         for (var j = 1; j < n - 1; j++) {
             var d2 = y[j + 1] - 2 * y[j] + y[j - 1];
             if (!isFiniteNumber(d2)) continue;
             if (d2Prev !== null && d2Prev * d2 < 0 && Math.abs(d2Prev) > d2Tolerance && Math.abs(d2) > d2Tolerance) {
-                // #region agent log
-                fetch('http://127.0.0.1:7935/ingest/fcb62245-938e-461a-9b82-63c8520f6360',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f17b4e'},body:JSON.stringify({sessionId:'f17b4e',location:'criticalPointDetector.js:inflection_push',message:'inflection sign change',data:{j: j, d2: d2, d2Prev: d2Prev, absD2: Math.abs(d2), absD2Prev: Math.abs(d2Prev), yRange: yRange},timestamp:Date.now(),hypothesisId:'H1,H2,H3'})}).catch(function(){});
-                // #endregion
                 out.inflection.push(refineInflection(x, y, j));
             }
             d2Prev = d2;
         }
-        // #region agent log
-        fetch('http://127.0.0.1:7935/ingest/fcb62245-938e-461a-9b82-63c8520f6360',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f17b4e'},body:JSON.stringify({sessionId:'f17b4e',location:'criticalPointDetector.js:findCriticalPoints_exit',message:'findCriticalPoints result counts',data:{minima: out.minima.length, maxima: out.maxima.length, inflection: out.inflection.length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(function(){});
-        // #endregion
         return out;
     }
 
