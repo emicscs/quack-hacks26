@@ -524,6 +524,48 @@
   line-height: 1;
 }
 
+/* Describe function (Gemini + TTS) */
+.graph-mode-page .describe-function-note {
+  font-size: 0.9rem;
+  color: var(--graph-fg-muted);
+  margin: 0 0 1rem;
+  line-height: 1.5;
+}
+
+.graph-mode-page .describe-function-btn {
+  padding: 0.6rem 1.25rem;
+  font-size: 0.95rem;
+  font-family: var(--graph-font-body);
+  font-weight: 600;
+  border-radius: 9999px;
+  cursor: pointer;
+  border: 1px solid var(--graph-accent);
+  background: var(--graph-accent-dim);
+  color: var(--graph-accent);
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.graph-mode-page .describe-function-btn:hover:not(:disabled) {
+  background: rgba(232, 168, 74, 0.25);
+  box-shadow: 0 4px 16px var(--graph-accent-dim);
+  transform: translateY(-1px);
+}
+
+.graph-mode-page .describe-function-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.graph-mode-page .describe-status {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--graph-fg-muted);
+}
+
+.graph-mode-page .describe-status--error {
+  color: #f08a7a;
+}
+
 /* Bottom instructions */
 .graph-mode-page .instructions {
   font-size: 0.9rem;

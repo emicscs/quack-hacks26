@@ -15,18 +15,33 @@ You must serve the project over **HTTP** (not `file://`) so CDN scripts, Web Aud
 
 ### With the Node backend (recommended)
 
-The backend serves the whole project and powers the describe API (requires a Gemini API key for that feature).
+The backend serves the whole project and powers the **Describe function** feature (Gemini vision + spoken description). You need a **Gemini API key** for that.
+
+**Setup (Gemini API key):**
+
+1. Get a key at [Google AI Studio](https://aistudio.google.com/apikey).
+2. In the project, copy the example env file and add your key:
+   ```bash
+   cd server
+   cp .env.example .env
+   ```
+3. Edit `server/.env` and set:
+   ```bash
+   GEMINI_API_KEY=your_actual_key_here
+   ```
+   Do not commit `.env` (it is typically in `.gitignore`). The app reads the key from `server/.env` when the server starts.
+
+**Run the server:**
 
 ```bash
 cd server
 npm install
-# Optional: add server/.env with GEMINI_API_KEY=your-key for /api/describe
 npm start
 ```
 
 Then open **http://localhost:3000** (or the port in `server/.env` via `PORT`). From there you can open `index.html`, `graph-mode.html`, or `desmos.html`.
 
-**Describe API:** To use AI-generated graph descriptions, set `GEMINI_API_KEY` in `server/.env`. The server uses `POST /api/describe` with `{ equation, imageBase64 }` and returns `{ description }`. The frontend module `js/describe-api.js` calls this when integrated into a page.
+**Describe function:** In Graph Mode, use the “Describe function” button. The app sends your equation and a snapshot of the graph to Gemini (`gemini-3-flash-preview`), which returns a short mathematical description (type, bounds, asymptotes, etc.). **The audio you hear is read from that description** using the browser’s Speech Synthesis API (dictation/TTS). Debug output is printed in the **server console** after each describe request (equation, image size, full description).
 
 ### Static only (no backend)
 
