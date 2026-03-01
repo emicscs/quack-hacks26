@@ -4,18 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Audible Math – Mathematical Sonification Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Syne:wght@500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/landing.css">
 </head>
-<body>
-    <main role="main" aria-label="Landing page">
-        <h1>Audible Math</h1>
-        <p id="intro" class="intro">
-            Explore mathematical functions through sound. This application translates graphs into an auditory landscape:
-            higher values sound higher in pitch, and you navigate along the x-axis with the arrow keys.
+<body class="landing-page">
+    <div class="landing-bg-gif" aria-hidden="true"></div>
+    <main role="main" aria-label="Landing page" class="landing-main">
+        <header class="landing-header">
+            <h1 class="landing-title">Audible Math</h1>
+            <p class="landing-tagline">Mathematical sonification engine</p>
+        </header>
+        <p id="intro" class="intro landing-intro">
+            Experience the beauty of math through sound by transforming graphs into an auditory landscape.
         </p>
-        <a href="graph-mode.html" id="enter-graph-mode" class="btn-primary" role="button" aria-label="Enter Graph Mode to explore functions with sound">
-            Enter Graph Mode
-        </a>
+        <div class="landing-actions">
+            <a href="graph-mode.html" id="enter-graph-mode" class="btn-primary landing-cta" role="button" aria-label="Enter Graph Mode to explore functions with sound">
+                Enter Graph Mode
+            </a>
+        </div>
     </main>
 </body>
 </html>

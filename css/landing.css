@@ -1,0 +1,174 @@
+/* Audible Math – Landing page revamp (modern, unique) */
+
+/* Paste your GIF path or URL here (e.g. url('../landing-bg.gif') or url('https://...')) */
+.landing-page {
+  --landing-bg-gif: url('../wave_bg.gif ');
+  --landing-bg: #0d0f14;
+  --landing-bg-soft: #13161e;
+  --landing-fg: #edf2ff;
+  --landing-fg-muted: #fffffc;
+  --landing-accent: #e8a84a;
+  --landing-accent-dim: rgba(232, 168, 74, 0.15);
+  --landing-accent-glow: rgba(232, 168, 74, 0.35);
+  --landing-border: rgba(255, 255, 255, 0.06);
+  --landing-font-title: "Syne", system-ui, sans-serif;
+  --landing-font-body: "DM Sans", system-ui, sans-serif;
+}
+
+.landing-page {
+  font-family: var(--landing-font-body);
+  background: var(--landing-bg);
+  color: var(--landing-fg);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Full-bleed GIF background – covers entire viewport, no gaps */
+.landing-bg-gif {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100%;
+  background-image: var(--landing-bg-gif);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.landing-main {
+  position: relative;
+  z-index: 1;
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: clamp(2rem, 6vw, 4rem) clamp(1.5rem, 4vw, 2.5rem);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  opacity: 0;
+  animation: landing-fade-in 2s ease-out 0.3s forwards;
+}
+
+@keyframes landing-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.landing-header {
+  margin-bottom: 1.5rem;
+}
+
+.landing-title {
+  font-family: var(--landing-font-title);
+  font-size: clamp(2.5rem, 8vw, 4rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 0 0 0.35em;
+  color: var(--landing-fg);
+}
+
+.landing-tagline {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--landing-accent);
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.landing-intro {
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  margin: 0 0 2.25rem;
+  max-width: 36ch;
+  background: linear-gradient(
+    90deg,
+    var(--landing-fg-muted) 0%,
+    var(--landing-fg-muted) 35%,
+    var(--landing-accent) 50%,
+    var(--landing-fg-muted) 65%,
+    var(--landing-fg-muted) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: wave-text 6s linear infinite;
+}
+
+@keyframes wave-text {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.landing-actions {
+  margin-bottom: 3rem;
+}
+
+.landing-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.95rem 1.85rem;
+  font-family: var(--landing-font-body);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--landing-accent);
+  color: var(--landing-bg);
+  text-decoration: none;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 0 0 0 var(--landing-accent-glow);
+}
+
+.landing-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px var(--landing-accent-glow);
+}
+
+.landing-cta:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--landing-bg), 0 0 0 5px var(--landing-accent);
+}
+
+.landing-footer {
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--landing-border);
+}
+
+.landing-link {
+  font-size: 0.9rem;
+  color: var(--landing-fg-muted);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.landing-link:hover {
+  color: var(--landing-accent);
+}
+
+/* Override shared .btn-primary if needed so landing uses its own style */
+.landing-page .btn-primary {
+  background: var(--landing-accent);
+  color: var(--landing-bg);
+}
+
+.landing-page .btn-primary:hover,
+.landing-page .btn-primary:focus {
+  filter: none;
+  outline: none;
+}
