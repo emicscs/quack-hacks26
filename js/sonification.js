@@ -106,12 +106,30 @@
         return maxPlaybackMs;
     }
 
+    function playBlockedCue() {
+        var ctx = getAudioContext();
+        var now = ctx.currentTime;
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(200, now);
+        osc.frequency.exponentialRampToValueAtTime(130, now + 0.11);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.09, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.13);
+    }
+
     global.AudibleMath = global.AudibleMath || {};
     global.AudibleMath.sonification = {
         setFrequencyFromY: setFrequencyFromY,
         stop: stop,
         getAudioContext: getAudioContext,
         setMaxPlaybackMs: setMaxPlaybackMs,
-        getMaxPlaybackMs: getMaxPlaybackMs
+        getMaxPlaybackMs: getMaxPlaybackMs,
+        playBlockedCue: playBlockedCue
     };
 })(typeof window !== "undefined" ? window : this);
