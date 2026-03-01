@@ -353,12 +353,13 @@
         var onCursorChange = options.onCursorChange;
         var enabled = true;
 
-        function run() {
+        function run(runtimeOpts) {
             if (!enabled || !graphSelector) return;
             var runAttach = function () {
                 var attachOptions = {};
                 if (typeof options.getData === "function") attachOptions.getData = options.getData;
                 if (typeof getCursorX === "function") attachOptions.getCursorX = getCursorX;
+                if (runtimeOpts && runtimeOpts.playTones === false) attachOptions.playTones = false;
                 attach(graphSelector, attachOptions);
             };
             if (attachDelayMs > 0) setTimeout(runAttach, attachDelayMs);

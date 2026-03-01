@@ -213,8 +213,8 @@
                 sonification.setFrequencyFromY(y, isValid);
             };
             graphState.onViewWindowChange = function () {
-                graphState.drawGraph();
-                if (criticalPoints) criticalPoints.run();
+                graphState.drawGraph({ preserveCursor: true, notifyCursor: false });
+                if (criticalPoints) criticalPoints.run({ playTones: false });
             };
 
             function formatDurationSeconds(ms) {

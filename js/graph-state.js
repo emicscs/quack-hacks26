@@ -32,8 +32,6 @@
     var activeNavKey = null;
     var activeDelayKey = null;
     var blockedCuePlayedForActiveNav = false;
-    var PAN_EDGE_RATIO = 0.15;
-    var PAN_SHIFT_RATIO = 0.6;
     var NAV_PROBE_STEPS = 8;
 
     var catalogDomains = {
@@ -108,6 +106,13 @@
         return null;
     }
 
+    function isAtTrueEnd(direction) {
+        var bound = getBoundForDirection(direction);
+        if (bound === null) return false;
+        var epsilon = Math.max(step * 0.25, 1e-9);
+        return Math.abs(currentX - bound) <= epsilon;
+    }
+
     function resolveNextX(delta) {
         if (!delta) return null;
         var direction = delta < 0 ? -1 : 1;
@@ -147,23 +152,37 @@
         return true;
     }
 
-    function panWindowIfNeeded(direction) {
-        if (!direction) return false;
+    function loadChunkIfOutOfView() {
         var width = domain.max - domain.min;
         if (!(width > 0)) return false;
-        var padding = width * PAN_EDGE_RATIO;
-        var nearRight = direction > 0 && currentX >= (domain.max - padding);
-        var nearLeft = direction < 0 && currentX <= (domain.min + padding);
-        if (!nearRight && !nearLeft) return false;
-        var shift = width * PAN_SHIFT_RATIO * (direction > 0 ? 1 : -1);
-        return setViewWindow(domain.min + shift, domain.max + shift, true);
+        var minX = domain.min;
+        var maxX = domain.max;
+
+        // Load full-width chunks only after cursor leaves current view.
+        while (currentX < minX) {
+            minX -= width;
+            maxX -= width;
+        }
+        while (currentX > maxX) {
+            minX += width;
+            maxX += width;
+        }
+        return setViewWindow(minX, maxX, true);
     }
 
     function moveCursor(delta) {
         var direction = delta < 0 ? -1 : (delta > 0 ? 1 : 0);
         var newX = resolveNextX(delta);
         if (newX === null) {
-            notifyBlockedNavigation();
+            // Only play the blocked cue when movement is blocked by a true boundary.
+            var attemptedX = currentX + delta;
+            var bound = getBoundForDirection(direction);
+            var hitsTrueBoundary = bound !== null && (
+                Math.abs(currentX - bound) <= Math.max(step * 0.25, 1e-9) ||
+                (direction < 0 && attemptedX < bound) ||
+                (direction > 0 && attemptedX > bound)
+            );
+            if (hitsTrueBoundary && isAtTrueEnd(direction)) notifyBlockedNavigation();
             return false;
         }
         if (stopAtCriticalPoints) {
@@ -175,7 +194,7 @@
         if (newX === currentX) return false;
         currentX = newX;
         blockedCuePlayedForActiveNav = false;
-        panWindowIfNeeded(direction);
+        loadChunkIfOutOfView();
         var y = getYAt(currentX);
         var isValid = !isNaN(y);
         updateCursorDisplay();
