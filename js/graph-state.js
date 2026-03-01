@@ -592,8 +592,11 @@
         return { x: lineX, y: lineY };
     }
 
-    function drawGraph() {
+    function drawGraph(options) {
+        options = options || {};
         if (typeof Plotly === "undefined") return;
+        var graphDiv = document.getElementById("graph");
+        if (!graphDiv) return;
         refreshSampledData();
         criticalPoints = calculateCriticalPoints();
         var segmentedLine = buildLineWithBreaks();
@@ -611,20 +614,43 @@
             plot_bgcolor: "#252525",
             font: { color: "#e8e8e8", size: 12 },
             hovermode: "closest",
-            xaxis: { title: "x", gridcolor: "#333", zerolinecolor: "#555", showspikes: false },
+            xaxis: { title: "x", gridcolor: "#333", zerolinecolor: "#555", showspikes: false, range: [domain.min, domain.max] },
             yaxis: { title: "y", gridcolor: "#333", zerolinecolor: "#555", showspikes: false },
             margin: { t: 40, r: 40, b: 50, l: 60 },
-            showlegend: true
+            showlegend: true,
+            uirevision: "graph-mode"
         };
         var config = { responsive: true };
-        Plotly.newPlot("graph", [trace], layout, config);
-        var graphDiv = document.getElementById("graph");
-        bindHoverTracking(graphDiv);
-        currentX = domain.min;
-        hoverPoint = null;
-        updatePlotlyCursor();
-        var y = getYAt(currentX);
-        onCursorChange(currentX, typeof y === "number" && isFinite(y) ? y : 0, !isNaN(y) && isFinite(y));
+
+        if (options.preserveCursor === true) {
+            currentX = clampToTrueDomain(currentX);
+        } else {
+            currentX = domain.min;
+        }
+
+        function finishDraw() {
+            bindHoverTracking(graphDiv);
+            hoverPoint = null;
+            updatePlotlyCursor();
+            updateCursorDisplay();
+            var y = getYAt(currentX);
+            if (options.notifyCursor !== false) {
+                onCursorChange(currentX, typeof y === "number" && isFinite(y) ? y : 0, !isNaN(y) && isFinite(y));
+            }
+            if (typeof options.onAfterDraw === "function") {
+                options.onAfterDraw();
+            }
+        }
+
+        var hasExistingPlot = Array.isArray(graphDiv.data) && graphDiv.data.length > 0;
+        var plotTask = hasExistingPlot
+            ? Plotly.react(graphDiv, [trace], layout, config)
+            : Plotly.newPlot(graphDiv, [trace], layout, config);
+        if (plotTask && typeof plotTask.then === "function") {
+            plotTask.then(finishDraw);
+        } else {
+            finishDraw();
+        }
     }
 
     function getFunctionLabel() {

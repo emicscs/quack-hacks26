@@ -344,7 +344,7 @@
         return points;
     }
 
-    var attachDelayMs = 150;
+    var attachDelayMs = 0;
 
     function integrate(options) {
         options = options || {};
@@ -355,12 +355,15 @@
 
         function run() {
             if (!enabled || !graphSelector) return;
-            setTimeout(function () {
+            var runAttach = function () {
                 var attachOptions = {};
                 if (typeof options.getData === "function") attachOptions.getData = options.getData;
                 if (typeof getCursorX === "function") attachOptions.getCursorX = getCursorX;
                 attach(graphSelector, attachOptions);
-            }, attachDelayMs);
+            };
+            if (attachDelayMs > 0) setTimeout(runAttach, attachDelayMs);
+            else if (typeof requestAnimationFrame === "function") requestAnimationFrame(runAttach);
+            else setTimeout(runAttach, 0);
         }
 
         function cursorHandler(x, y, isValid) {
