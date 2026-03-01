@@ -70,7 +70,7 @@
             domain.max = preset.viewMax;
         }
         if (!options.preserveCursor) {
-            currentX = clampToTrueDomain(domain.min);
+            currentX = Math.max(domain.min, Math.min(domain.max, clampToTrueDomain(0)));
         } else {
             currentX = clampToTrueDomain(currentX);
         }
@@ -644,7 +644,7 @@
         if (options.preserveCursor === true) {
             currentX = clampToTrueDomain(currentX);
         } else {
-            currentX = domain.min;
+            currentX = Math.max(domain.min, Math.min(domain.max, clampToTrueDomain(0)));
         }
 
         function finishDraw() {

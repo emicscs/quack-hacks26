@@ -10,7 +10,7 @@
  *
  * Options: getData, markPoints, playTones, clearMarks, onDetect, onMarkPoints,
  *   markerSize, beepDuration, beepGap, freqMin, freqMax, freqInflection,
- *   initialCursorX, getCursorX, xTolerance.
+ *   initialCursorX, getCursorX, xTolerance, soundDirectory, soundUrls.
  */
 (function (global) {
     "use strict";
@@ -126,6 +126,119 @@
         return out;
     }
 
+    function playCriticalCue(ctx, type, when, duration, gainValue) {
+        if (type === "max") {
+            var bellGain = ctx.createGain();
+            var bellMain = ctx.createOscillator();
+            var bellOver = ctx.createOscillator();
+            bellMain.type = "sine";
+            bellOver.type = "triangle";
+            bellMain.frequency.setValueAtTime(980, when);
+            bellOver.frequency.setValueAtTime(1480, when);
+            bellGain.gain.setValueAtTime(gainValue, when);
+            bellGain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+            bellMain.connect(bellGain);
+            bellOver.connect(bellGain);
+            bellGain.connect(ctx.destination);
+            bellMain.start(when);
+            bellOver.start(when);
+            bellMain.stop(when + duration);
+            bellOver.stop(when + duration);
+            return;
+        }
+
+        if (type === "min") {
+            var minGain = Math.max(gainValue, 0.7);
+            var gongGain = ctx.createGain();
+            var gongMain = ctx.createOscillator();
+            var gongLow = ctx.createOscillator();
+            gongMain.type = "triangle";
+            gongLow.type = "sine";
+            gongMain.frequency.setValueAtTime(170, when);
+            gongMain.frequency.exponentialRampToValueAtTime(120, when + duration * 0.9);
+            gongLow.frequency.setValueAtTime(85, when);
+            gongLow.frequency.exponentialRampToValueAtTime(60, when + duration * 0.9);
+            gongGain.gain.setValueAtTime(minGain, when);
+            gongGain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+            gongMain.connect(gongGain);
+            gongLow.connect(gongGain);
+            gongGain.connect(ctx.destination);
+            gongMain.start(when);
+            gongLow.start(when);
+            gongMain.stop(when + duration);
+            gongLow.stop(when + duration);
+            return;
+        }
+
+        var noiseDuration = Math.max(0.06, Math.min(duration, 0.16));
+        var bufferSize = Math.max(1, Math.floor(ctx.sampleRate * noiseDuration));
+        var noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        var noiseData = noiseBuffer.getChannelData(0);
+        for (var i = 0; i < bufferSize; i++) noiseData[i] = Math.random() * 2 - 1;
+        var noise = ctx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        var snareFilter = ctx.createBiquadFilter();
+        snareFilter.type = "bandpass";
+        snareFilter.frequency.setValueAtTime(1800, when);
+        snareFilter.Q.setValueAtTime(0.8, when);
+        var noiseGain = ctx.createGain();
+        noiseGain.gain.setValueAtTime(Math.min(0.22, gainValue), when);
+        noiseGain.gain.exponentialRampToValueAtTime(0.0001, when + noiseDuration);
+        noise.connect(snareFilter);
+        snareFilter.connect(noiseGain);
+        noiseGain.connect(ctx.destination);
+
+        var body = ctx.createOscillator();
+        var bodyGain = ctx.createGain();
+        body.type = "triangle";
+        body.frequency.setValueAtTime(185, when);
+        body.frequency.exponentialRampToValueAtTime(130, when + noiseDuration * 0.9);
+        bodyGain.gain.setValueAtTime(Math.min(0.1, gainValue * 0.6), when);
+        bodyGain.gain.exponentialRampToValueAtTime(0.0001, when + noiseDuration * 0.9);
+        body.connect(bodyGain);
+        bodyGain.connect(ctx.destination);
+        noise.start(when);
+        noise.stop(when + noiseDuration);
+        body.start(when);
+        body.stop(when + noiseDuration * 0.9);
+    }
+
+    function playTambourine(ctx, when) {
+        var tambDur = 0.15;
+        var bufLen = Math.ceil(ctx.sampleRate * tambDur);
+        var noiseBuf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+        var nd = noiseBuf.getChannelData(0);
+        for (var s = 0; s < bufLen; s++) nd[s] = Math.random() * 2 - 1;
+        var noise = ctx.createBufferSource();
+        noise.buffer = noiseBuf;
+        var hpf = ctx.createBiquadFilter();
+        hpf.type = "highpass";
+        hpf.frequency.value = 8000;
+        var bpf = ctx.createBiquadFilter();
+        bpf.type = "bandpass";
+        bpf.frequency.value = 12000;
+        bpf.Q.value = 0.8;
+        var nGain = ctx.createGain();
+        nGain.gain.setValueAtTime(1.0, when);
+        nGain.gain.exponentialRampToValueAtTime(0.001, when + tambDur);
+        noise.connect(hpf);
+        hpf.connect(bpf);
+        bpf.connect(nGain);
+        nGain.connect(ctx.destination);
+        var jingle = ctx.createOscillator();
+        jingle.type = "square";
+        jingle.frequency.setValueAtTime(6500, when);
+        var jGain = ctx.createGain();
+        jGain.gain.setValueAtTime(0.3, when);
+        jGain.gain.exponentialRampToValueAtTime(0.001, when + tambDur * 0.6);
+        jingle.connect(jGain);
+        jGain.connect(ctx.destination);
+        noise.start(when);
+        noise.stop(when + tambDur);
+        jingle.start(when);
+        jingle.stop(when + tambDur);
+    }
+
     function playTones(points, options) {
         if (!AudioContext) return;
         options = options || {};
@@ -136,32 +249,97 @@
         }
         if (ctx.state === "suspended") ctx.resume();
 
-        var duration = Number.isFinite(options.beepDuration) ? options.beepDuration : 0.12;
+        var duration = Number.isFinite(options.beepDuration) ? options.beepDuration : 0.16;
         var gap = Number.isFinite(options.beepGap) ? options.beepGap : 0.08;
-        var freqMin = Number.isFinite(options.freqMin) ? options.freqMin : 280;
-        var freqMax = Number.isFinite(options.freqMax) ? options.freqMax : 520;
-        var freqInf = Number.isFinite(options.freqInflection) ? options.freqInflection : 740;
+        var cueGain = Number.isFinite(options.cueGain) ? options.cueGain : 0.22;
 
-        function beep(freq, when) {
-            var osc = ctx.createOscillator();
-            var gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.type = "sine";
-            osc.frequency.setValueAtTime(freq, when);
-            gain.gain.setValueAtTime(0.15, when);
-            gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
-            osc.start(when);
-            osc.stop(when + duration);
-        }
-
-        var t = ctx.currentTime;
-        points.minima.forEach(function () { beep(freqMin, t); t += duration + gap; });
-        points.maxima.forEach(function () { beep(freqMax, t); t += duration + gap; });
-        points.inflection.forEach(function () { beep(freqInf, t); t += duration + gap; });
+        var useCustom = (options.soundDirectory || options.soundUrls) && crossingState.soundBuffers;
+        var introCtx = options.audioContext || crossingState.audioContext || ctx;
+        var t = introCtx.currentTime;
+        points.minima.forEach(function () {
+            if (useCustom && crossingState.soundBuffers["intro-min"]) playBufferSound(introCtx, crossingState.soundBuffers["intro-min"], t, 0.2);
+            else playCriticalCue(introCtx, "min", t, duration, cueGain);
+            t += duration + gap;
+        });
+        points.maxima.forEach(function () {
+            if (useCustom && crossingState.soundBuffers["intro-max"]) playBufferSound(introCtx, crossingState.soundBuffers["intro-max"], t, 0.2);
+            else playCriticalCue(introCtx, "max", t, duration, cueGain);
+            t += duration + gap;
+        });
+        points.inflection.forEach(function () {
+            if (useCustom && crossingState.soundBuffers["intro-inflection"]) playBufferSound(introCtx, crossingState.soundBuffers["intro-inflection"], t, 0.2);
+            else playCriticalCue(introCtx, "inflection", t, duration, cueGain);
+            t += duration + gap;
+        });
     }
 
-    var crossingState = { lastCursorX: null, points: null, audioContext: null, xTolerance: 0.06 };
+    var crossingState = { lastCursorX: null, points: null, audioContext: null, xTolerance: 0.06, soundBuffers: {} };
+    var SOUND_KEYS = ["intro-min", "intro-max", "intro-inflection", "crossing-min", "crossing-max", "crossing-inflection"];
+    var SOUND_EXTENSIONS = ["mp3", "wav", "ogg"];
+
+    function getSoundUrls(key, options) {
+        if (options.soundUrls && typeof options.soundUrls[key] === "string") return [options.soundUrls[key]];
+        var dir = options.soundDirectory;
+        if (typeof dir !== "string" || !dir.length) return [];
+        dir = dir.replace(/\/$/, "");
+        var base = dir + "/" + key;
+        return SOUND_EXTENSIONS.map(function (ext) { return base + "." + ext; });
+    }
+
+    function loadSoundBuffer(ctx, urlList, key, cache, callback) {
+        if (!urlList || !urlList.length || !ctx.decodeAudioData) return callback();
+        var idx = 0;
+        function tryNext() {
+            if (idx >= urlList.length) return callback();
+            var url = urlList[idx++];
+            var req = new XMLHttpRequest();
+            req.open("GET", url, true);
+            req.responseType = "arraybuffer";
+            req.onload = function () {
+                if (req.status !== 200) return tryNext();
+                ctx.decodeAudioData(req.response, function (buf) { cache[key] = buf; callback(); }, tryNext);
+            };
+            req.onerror = tryNext;
+            req.send();
+        }
+        tryNext();
+    }
+
+    function preloadSounds(options, callback) {
+        var ctx = options.audioContext || crossingState.audioContext;
+        if (!ctx) {
+            ctx = new AudioContext();
+            crossingState.audioContext = ctx;
+        }
+        var cache = crossingState.soundBuffers;
+        var keys = SOUND_KEYS.slice();
+        var urls = [];
+        for (var i = 0; i < keys.length; i++) {
+            var u = getSoundUrls(keys[i], options);
+            if (u.length) urls.push({ key: keys[i], urlList: u });
+        }
+        if (!urls.length) return callback && callback();
+        var left = urls.length;
+        urls.forEach(function (item) {
+            loadSoundBuffer(ctx, item.urlList, item.key, cache, function () {
+                left--;
+                if (left === 0 && callback) callback();
+            });
+        });
+    }
+
+    function playBufferSound(ctx, buffer, when, gain) {
+        if (!ctx || !buffer) return;
+        if (ctx.state === "suspended") ctx.resume();
+        var src = ctx.createBufferSource();
+        var g = ctx.createGain();
+        src.buffer = buffer;
+        src.connect(g);
+        g.connect(ctx.destination);
+        g.gain.setValueAtTime(Number.isFinite(gain) ? gain : 0.4, when);
+        src.start(when);
+        src.stop(when + buffer.duration);
+    }
 
     function playCrossingSound(type, options) {
         if (!AudioContext) return;
@@ -172,70 +350,24 @@
             crossingState.audioContext = ctx;
         }
         if (ctx.state === "suspended") ctx.resume();
-
-        var duration = Number.isFinite(options.crossingDuration) ? options.crossingDuration : 0.28;
-        var gain = Number.isFinite(options.crossingGain) ? options.crossingGain : 0.4;
-        var freqMin = Number.isFinite(options.freqMin) ? options.freqMin : 280;
-        var freqMax = Number.isFinite(options.freqMax) ? options.freqMax : 520;
-        var freqInf = Number.isFinite(options.freqInflection) ? options.freqInflection : 740;
-        var freqIx = Number.isFinite(options.freqIntersection) ? options.freqIntersection : 880;
         var when = ctx.currentTime;
 
         if (type === "intersection") {
-            var snareDur = 0.2;
-            var bufLen = Math.ceil(ctx.sampleRate * snareDur);
-            var noiseBuf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
-            var nd = noiseBuf.getChannelData(0);
-            for (var s = 0; s < bufLen; s++) nd[s] = Math.random() * 2 - 1;
-            var noise = ctx.createBufferSource();
-            noise.buffer = noiseBuf;
-            var hpf = ctx.createBiquadFilter();
-            hpf.type = "highpass";
-            hpf.frequency.value = 2000;
-            var lpf = ctx.createBiquadFilter();
-            lpf.type = "lowpass";
-            lpf.frequency.value = 9000;
-            var nGain = ctx.createGain();
-            nGain.gain.setValueAtTime(0.9, when);
-            nGain.gain.exponentialRampToValueAtTime(0.001, when + snareDur);
-            noise.connect(hpf);
-            hpf.connect(lpf);
-            lpf.connect(nGain);
-            nGain.connect(ctx.destination);
-            var body = ctx.createOscillator();
-            body.type = "triangle";
-            body.frequency.setValueAtTime(180, when);
-            body.frequency.exponentialRampToValueAtTime(80, when + snareDur * 0.3);
-            var bGain = ctx.createGain();
-            bGain.gain.setValueAtTime(0.8, when);
-            bGain.gain.exponentialRampToValueAtTime(0.001, when + snareDur * 0.25);
-            body.connect(bGain);
-            bGain.connect(ctx.destination);
-            noise.start(when);
-            noise.stop(when + snareDur);
-            body.start(when);
-            body.stop(when + snareDur);
+            playTambourine(ctx, when);
             return;
         }
 
-        var freq = type === "min" ? freqMin : type === "max" ? freqMax : freqInf;
+        var crossingKey = "crossing-" + type;
+        var buf = crossingState.soundBuffers && crossingState.soundBuffers[crossingKey];
+        if (buf && (options.soundDirectory || options.soundUrls)) {
+            var bufGain = Number.isFinite(options.crossingGain) ? options.crossingGain : 0.4;
+            playBufferSound(ctx, buf, when, bufGain);
+            return;
+        }
 
-        var osc = ctx.createOscillator();
-        var osc2 = ctx.createOscillator();
-        var g = ctx.createGain();
-        osc.connect(g);
-        osc2.connect(g);
-        g.connect(ctx.destination);
-        osc.type = "square";
-        osc2.type = "sine";
-        osc.frequency.setValueAtTime(freq, when);
-        osc2.frequency.setValueAtTime(freq * 1.2, when);
-        g.gain.setValueAtTime(gain, when);
-        g.gain.exponentialRampToValueAtTime(0.001, when + duration);
-        osc.start(when);
-        osc2.start(when);
-        osc.stop(when + duration);
-        osc2.stop(when + duration);
+        var duration = Number.isFinite(options.crossingDuration) ? options.crossingDuration : 0.24;
+        var gain = Number.isFinite(options.crossingGain) ? options.crossingGain : 0.26;
+        playCriticalCue(ctx, type, when, duration, gain);
     }
 
     function crossed(prev, curr, pointX, tol) {
@@ -367,6 +499,8 @@
 
         if (options.clearMarks !== false) removePlotlyMarks(container);
 
+        if (options.soundDirectory || options.soundUrls) preloadSounds(options);
+
         var points;
         if (data.criticalPoints &&
             Array.isArray(data.criticalPoints.minima) &&
@@ -411,6 +545,8 @@
                 if (typeof options.getData === "function") attachOptions.getData = options.getData;
                 if (typeof getCursorX === "function") attachOptions.getCursorX = getCursorX;
                 if (runtimeOpts && runtimeOpts.playTones === false) attachOptions.playTones = false;
+                if (options.soundDirectory) attachOptions.soundDirectory = options.soundDirectory;
+                if (options.soundUrls) attachOptions.soundUrls = options.soundUrls;
                 attach(graphSelector, attachOptions);
             };
             if (attachDelayMs > 0) setTimeout(runAttach, attachDelayMs);

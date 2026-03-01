@@ -62,6 +62,25 @@
             </label>
         </section>
 
+        <section aria-label="Sound directory" class="sound-directory">
+            <h2 class="sound-directory__title">Sound Directory</h2>
+            <p class="sound-directory__desc">Preview the sounds used for each point type:</p>
+            <div class="sound-directory__buttons">
+                <button type="button" class="sound-btn sound-btn--min" data-sound="min">
+                    <span class="sound-btn__icon" style="color:#2ecc71">&#9660;</span> Local Minimum
+                </button>
+                <button type="button" class="sound-btn sound-btn--max" data-sound="max">
+                    <span class="sound-btn__icon" style="color:#e74c3c">&#9650;</span> Local Maximum
+                </button>
+                <button type="button" class="sound-btn sound-btn--inflection" data-sound="inflection">
+                    <span class="sound-btn__icon" style="color:#3498db">&#9670;</span> Inflection Point
+                </button>
+                <button type="button" class="sound-btn sound-btn--intersection" data-sound="intersection">
+                    <span class="sound-btn__icon" style="color:#ff9800">&#9674;</span> Intersection
+                </button>
+            </div>
+        </section>
+
         <p class="instructions">Use <kbd>←</kbd>/<kbd>→</kbd> to move by step size. Tap once for one immediate step,
             hold to repeat using the step interval. Use <kbd>↑</kbd>/<kbd>↓</kbd> to change the step interval by 0.1
             seconds.</p>
@@ -473,6 +492,34 @@
                 extraRowsContainer.appendChild(rowEl);
                 rowEl.querySelector(".desmos-row__input").focus();
             });
+
+            // --- Sound directory buttons ---
+            var SOUND_DESCRIPTIONS = {
+                min: "This is the local minimum sound. You will hear a low gong tone when the cursor crosses a valley, the lowest point in a section of the graph.",
+                max: "This is the local maximum sound. You will hear a high bell tone when the cursor crosses a peak, the highest point in a section of the graph.",
+                inflection: "This is the inflection point sound. You will hear a short snare hit when the cursor crosses a point where the curve changes from bending up to bending down, or vice versa.",
+                intersection: "This is the intersection sound. You will hear a tambourine hit when the cursor crosses a point where two graphs meet."
+            };
+
+            var soundBtns = document.querySelectorAll(".sound-btn[data-sound]");
+            for (var si = 0; si < soundBtns.length; si++) {
+                (function (btn) {
+                    btn.addEventListener("click", function () {
+                        var type = btn.getAttribute("data-sound");
+                        if (window.CriticalPointDetector && CriticalPointDetector.playCrossingSound) {
+                            CriticalPointDetector.playCrossingSound(type, {});
+                        }
+                        if ("speechSynthesis" in window && SOUND_DESCRIPTIONS[type]) {
+                            window.speechSynthesis.cancel();
+                            var utterance = new SpeechSynthesisUtterance(SOUND_DESCRIPTIONS[type]);
+                            utterance.rate = 1.0;
+                            utterance.pitch = 1.0;
+                            utterance.volume = 1.0;
+                            window.speechSynthesis.speak(utterance);
+                        }
+                    });
+                })(soundBtns[si]);
+            }
 
             graphState.init();
             exprInput.value = "y = sin(x)";
