@@ -71,6 +71,9 @@
                 <div class="graph-mode-graph-topbar">
                     <p class="instructions graph-mode-instructions">Adjust along the graph with <kbd>←</kbd>/<kbd>→</kbd> keys.</p>
                     <div class="graph-mode-graph-actions">
+                        <button type="button" id="mic-btn" class="mic-btn" aria-label="Voice input – click to start recording" title="Voice input">
+                            <svg class="mic-btn__icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                        </button>
                         <div class="describe-graph-wrap">
                             <button type="button" id="describe-function-btn" class="describe-graph-btn" aria-describedby="describe-graph-tip">describe graph</button>
                             <div id="describe-graph-tip" class="describe-graph-tip" role="tooltip">Generate a mathematical description of your function and graph (type, bounds, asymptotes). The audio you hear is read from the description that Gemini creates.</div>
@@ -829,6 +832,293 @@
                         });
                 });
             }
+
+            // --- Voice command system: mic → speech recognition → Gemini → action ---
+            (function initVoiceCommands() {
+                var micBtn = document.getElementById("mic-btn");
+                if (!micBtn) return;
+
+                var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) {
+                    micBtn.disabled = true;
+                    micBtn.title = "Speech recognition not supported in this browser";
+                    return;
+                }
+
+                var recognition = new SpeechRecognition();
+                recognition.continuous = true;
+                recognition.interimResults = false;
+                recognition.lang = "en-US";
+
+                var isRecording = false;
+                var isProcessing = false;
+
+                function setRecordingState(active) {
+                    isRecording = active;
+                    micBtn.classList.toggle("mic-btn--active", active);
+                    micBtn.classList.toggle("mic-btn--processing", false);
+                    micBtn.setAttribute("aria-label", active ? "Recording – click to stop" : "Voice input – click to start recording");
+                    micBtn.title = active ? "Recording… click to stop" : "Voice input";
+                }
+
+                function setProcessingState(active) {
+                    isProcessing = active;
+                    micBtn.classList.toggle("mic-btn--processing", active);
+                    if (active) {
+                        micBtn.classList.remove("mic-btn--active");
+                        micBtn.title = "Processing your command…";
+                    }
+                }
+
+                // -- Speak feedback to the user --
+                function speakFeedback(text) {
+                    if (!text || !("speechSynthesis" in window)) return;
+                    window.speechSynthesis.cancel();
+                    var utterance = new SpeechSynthesisUtterance(text);
+                    utterance.rate = 1.1;
+                    utterance.pitch = 1.0;
+                    utterance.volume = 1.0;
+                    var voices = window.speechSynthesis.getVoices();
+                    var en = voices.filter(function (v) { return v.lang && v.lang.startsWith("en"); });
+                    if (en.length) utterance.voice = en[0];
+                    window.speechSynthesis.speak(utterance);
+                }
+
+                // -- Gather current app state for Gemini context --
+                function getAppContext() {
+                    var xEl = document.getElementById("current-x");
+                    var yEl = document.getElementById("current-y");
+                    return {
+                        currentFunction: exprInput.value || "",
+                        stepSize: graphState.getCursorStep(),
+                        soundDuration: maxSoundDurationInput ? parseFloat(maxSoundDurationInput.value) : 0.5,
+                        stopAtCritical: graphState.getStopAtCriticalPoints(),
+                        cursorX: xEl ? xEl.textContent : "0",
+                        cursorY: yEl ? yEl.textContent : "0"
+                    };
+                }
+
+                // -- Send transcript to server, get action JSON back --
+                function sendToGemini(transcript) {
+                    console.log("[voice] Sending to Gemini:", transcript);
+                    setProcessingState(true);
+                    speakFeedback("Processing.");
+
+                    return fetch("/api/voice-command", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            transcript: transcript,
+                            context: getAppContext()
+                        })
+                    })
+                    .then(function (res) { return res.json(); })
+                    .then(function (cmd) {
+                        console.log("[voice] Gemini returned:", JSON.stringify(cmd));
+                        setProcessingState(false);
+                        return cmd;
+                    })
+                    .catch(function (err) {
+                        console.error("[voice] Request failed:", err);
+                        setProcessingState(false);
+                        speakFeedback("Sorry, something went wrong. Please try again.");
+                        return null;
+                    });
+                }
+
+                // -- Execute the action Gemini returns --
+                function executeCommand(cmd) {
+                    if (!cmd || !cmd.action) return;
+                    console.log("[voice] Executing action:", cmd.action);
+
+                    switch (cmd.action) {
+
+                    case "add_function":
+                        if (!cmd.expression) {
+                            speakFeedback("I didn't catch the function. Try saying something like: add function x squared.");
+                            return;
+                        }
+                        var addExpr = cmd.expression.replace(/^y\s*=\s*/i, "").trim();
+                        var placeholder = null;
+                        for (var ei = extraEntries.length - 1; ei >= 0; ei--) {
+                            if (extraEntries[ei].isPlaceholder) { placeholder = extraEntries[ei]; break; }
+                        }
+                        if (!placeholder) {
+                            placeholder = addExtraEntry(false, true);
+                        }
+                        var placeholderInput = placeholder.inputEl || (placeholder.rowEl && placeholder.rowEl.querySelector(".desmos-row__input"));
+                        if (placeholderInput) {
+                            placeholderInput.focus();
+                            placeholderInput.value = addExpr;
+                            placeholderInput.dispatchEvent(new Event("input", { bubbles: true }));
+                            placeholderInput.dispatchEvent(new Event("blur", { bubbles: true }));
+                        }
+                        ensureTrailingPlaceholderRow();
+                        speakFeedback("Added " + addExpr + " to the graph.");
+                        break;
+
+                    case "set_step_size":
+                        var newStep;
+                        if (cmd.relative === "smaller") {
+                            newStep = graphState.getCursorStep() / 2;
+                        } else if (cmd.relative === "larger" || cmd.relative === "bigger") {
+                            newStep = graphState.getCursorStep() * 2;
+                        } else {
+                            newStep = parseFloat(cmd.value);
+                        }
+                        if (isFinite(newStep) && newStep > 0) {
+                            graphState.setCursorStep(newStep);
+                            if (stepInput) stepInput.value = String(newStep);
+                            speakFeedback("Step size set to " + newStep);
+                        } else {
+                            speakFeedback("I couldn't set that step size.");
+                        }
+                        break;
+
+                    case "set_sound_duration":
+                        var newDur;
+                        var currentDur = maxSoundDurationInput ? parseFloat(maxSoundDurationInput.value) : 0.5;
+                        if (cmd.relative === "shorter") {
+                            newDur = Math.max(0.1, currentDur / 2);
+                        } else if (cmd.relative === "longer") {
+                            newDur = currentDur * 2;
+                        } else {
+                            newDur = parseFloat(cmd.value);
+                        }
+                        if (isFinite(newDur) && newDur > 0 && maxSoundDurationInput) {
+                            maxSoundDurationInput.value = newDur.toFixed(1);
+                            maxSoundDurationInput.dispatchEvent(new Event("change"));
+                            speakFeedback("Sound duration set to " + newDur.toFixed(1) + " seconds");
+                        } else {
+                            speakFeedback("I couldn't set that sound duration.");
+                        }
+                        break;
+
+                    case "toggle_critical_points":
+                        var enable = !!cmd.enabled;
+                        graphState.setStopAtCriticalPoints(enable);
+                        if (stopCriticalToggle) stopCriticalToggle.checked = enable;
+                        speakFeedback("Stop at critical points " + (enable ? "enabled" : "disabled"));
+                        break;
+
+                    case "describe_graph":
+                        speakFeedback("Describing the graph.");
+                        var describeBtnEl = document.getElementById("describe-function-btn");
+                        if (describeBtnEl) describeBtnEl.click();
+                        break;
+
+                    case "navigate":
+                        var dir = cmd.direction === "left" ? -1 : 1;
+                        var steps = Math.max(1, parseInt(cmd.steps) || 1);
+                        for (var i = 0; i < steps; i++) {
+                            graphState.moveCursor(dir * graphState.getCursorStep());
+                        }
+                        var xAfter = document.getElementById("current-x");
+                        var yAfter = document.getElementById("current-y");
+                        speakFeedback("Moved " + cmd.direction + " " + steps + " step" + (steps > 1 ? "s" : "") + ". x is " + (xAfter ? xAfter.textContent : "") + ", y is " + (yAfter ? yAfter.textContent : ""));
+                        break;
+
+                    case "read_position":
+                        var xNow = document.getElementById("current-x");
+                        var yNow = document.getElementById("current-y");
+                        speakFeedback("x is " + (xNow ? xNow.textContent : "unknown") + ", y is " + (yNow ? yNow.textContent : "unknown"));
+                        break;
+
+                    case "select_example":
+                        var name = cmd.name;
+                        if (name) {
+                            catalog.value = name;
+                            catalog.dispatchEvent(new Event("change"));
+                            speakFeedback("Showing example: " + name);
+                        } else {
+                            speakFeedback("I didn't catch which example. Try: show me sine, or try x squared.");
+                        }
+                        break;
+
+                    case "unknown":
+                        speakFeedback(cmd.message || "I didn't understand that. Try saying something like: graph x squared, or make the step size smaller.");
+                        break;
+
+                    default:
+                        speakFeedback("I'm not sure what to do with that command.");
+                        break;
+                    }
+                }
+
+                // -- Toggle recording on/off --
+                function toggleRecording() {
+                    if (isProcessing) return;
+                    if (isRecording) {
+                        recognition.stop();
+                    } else {
+                        navigator.mediaDevices.getUserMedia({ audio: true })
+                            .then(function (stream) {
+                                stream.getTracks().forEach(function (t) { t.stop(); });
+                                try {
+                                    recognition.start();
+                                    setRecordingState(true);
+                                    speakFeedback("Listening.");
+                                } catch (err) {
+                                    console.error("[voice] recognition.start() failed:", err);
+                                }
+                            })
+                            .catch(function (err) {
+                                console.error("[voice] Microphone denied:", err);
+                                speakFeedback("Microphone access was denied. Please allow microphone access and try again.");
+                            });
+                    }
+                }
+
+                micBtn.addEventListener("click", toggleRecording);
+
+                // Press "V" anywhere (outside text inputs) to toggle recording
+                document.addEventListener("keydown", function (e) {
+                    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
+                    if (e.key === "v" || e.key === "V") {
+                        e.preventDefault();
+                        toggleRecording();
+                    }
+                });
+
+                // -- Collect final transcript on end, then send to Gemini --
+                var collectedTranscript = "";
+
+                recognition.addEventListener("result", function (e) {
+                    collectedTranscript = "";
+                    for (var i = 0; i < e.results.length; i++) {
+                        if (e.results[i].isFinal) {
+                            collectedTranscript += e.results[i][0].transcript;
+                        }
+                    }
+                });
+
+                recognition.addEventListener("end", function () {
+                    setRecordingState(false);
+                    var transcript = collectedTranscript.trim();
+                    collectedTranscript = "";
+                    if (!transcript) {
+                        console.log("[voice] No speech detected");
+                        speakFeedback("I didn't hear anything. Try again.");
+                        return;
+                    }
+                    console.log("[voice] Final transcript:", transcript);
+                    sendToGemini(transcript).then(function (cmd) {
+                        if (cmd) executeCommand(cmd);
+                    });
+                });
+
+                recognition.addEventListener("error", function (e) {
+                    console.error("[voice] Recognition error:", e.error);
+                    setRecordingState(false);
+                    if (e.error === "no-speech") {
+                        speakFeedback("I didn't hear anything. Try again.");
+                    } else if (e.error === "not-allowed") {
+                        speakFeedback("Microphone access was blocked.");
+                    } else {
+                        speakFeedback("Voice recognition error. Please try again.");
+                    }
+                });
+            })();
 
             if (focusRegion) focusRegion.focus();
         })();

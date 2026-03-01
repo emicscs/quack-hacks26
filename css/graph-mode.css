@@ -132,7 +132,73 @@
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  gap: 0.5rem;
   padding-right: 0;
+}
+
+/* Mic button */
+.mic-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--graph-border);
+  background: var(--graph-bg-card);
+  color: var(--graph-fg-muted);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.mic-btn:hover:not(:disabled) {
+  color: var(--graph-accent);
+  border-color: var(--graph-accent);
+  box-shadow: 0 0 12px var(--graph-accent-dim);
+}
+
+.mic-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.mic-btn--active {
+  color: #e74c3c;
+  border-color: #e74c3c;
+  background: rgba(231, 76, 60, 0.12);
+  box-shadow: 0 0 14px rgba(231, 76, 60, 0.35);
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+
+.mic-btn--active:hover {
+  color: #e74c3c;
+  border-color: #e74c3c;
+  box-shadow: 0 0 18px rgba(231, 76, 60, 0.45);
+}
+
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(231, 76, 60, 0.35); }
+  50% { box-shadow: 0 0 22px rgba(231, 76, 60, 0.55); }
+}
+
+.mic-btn--processing {
+  color: var(--graph-accent);
+  border-color: var(--graph-accent);
+  background: var(--graph-accent-dim);
+  animation: mic-processing-spin 1s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes mic-processing-spin {
+  0% { box-shadow: 0 0 10px var(--graph-accent-dim); }
+  50% { box-shadow: 0 0 20px var(--graph-accent-glow); }
+  100% { box-shadow: 0 0 10px var(--graph-accent-dim); }
+}
+
+.mic-btn__icon {
+  display: block;
+  pointer-events: none;
 }
 
 .graph-mode-graph-actions .describe-graph-tip {
