@@ -48,6 +48,17 @@
                     <span id="catalog-desc" class="visually-hidden">Choose a function to graph and sonify.</span>
                 </section>
 
+                <section aria-label="Describe function with Gemini" class="expression-list-section graph-mode-card">
+                    <div class="expression-list-header">
+                        <span>Describe Function (Gemini)</span>
+                    </div>
+                    <p class="describe-function-note">Generate a mathematical description of your function and graph (type, bounds, asymptotes). <strong>The audio you hear is read from the description that Gemini creates.</strong></p>
+                    <button type="button" id="describe-function-btn" class="describe-function-btn" aria-describedby="describe-function-desc">Describe function</button>
+                    <span id="describe-function-desc" class="visually-hidden">Request an AI-generated spoken description of the current function and graph; the description is then read aloud.</span>
+                    <p id="describe-status" class="describe-status" aria-live="polite" aria-atomic="true"></p>
+                    <button type="button" id="read-aloud-btn" class="describe-function-btn read-aloud-btn" style="display:none; margin-top:0.5rem;" aria-label="Read description aloud">Read aloud</button>
+                </section>
+
                 <section aria-label="Additional expressions" class="expression-list-section graph-mode-card">
                     <div class="expression-list-header">
                         <span>Additional Functions</span>
@@ -113,6 +124,7 @@
     <script src="js/graph-state.js"></script>
     <script src="js/sonification.js"></script>
     <script src="js/voice-intro.js"></script>
+    <script src="js/describe-api.js"></script>
     <script src="criticalPointDetector.js"></script>
     <script>
         (function initGraphMode() {
@@ -574,6 +586,133 @@
             renderLatex(exprInput.value);
             applyExpression(exprInput.value);
             updateSettingsUi(graphState.getCursorStep(), graphState.getRepeatDelayMs(), graphState.getStopAtCriticalPoints());
+
+            // --- Describe function (Gemini vision + TTS) ---
+            var describeBtn = document.getElementById("describe-function-btn");
+            var describeStatus = document.getElementById("describe-status");
+            var describeApi = window.AudibleMath && window.AudibleMath.describeApi;
+
+            // Load voices early so they're ready when we speak (Chrome populates getVoices() after voiceschanged).
+            if (window.speechSynthesis) {
+                window.speechSynthesis.getVoices();
+                window.speechSynthesis.onvoiceschanged = function () { window.speechSynthesis.getVoices(); };
+            }
+
+            // Unlock audio on first user interaction so Speech Synthesis works after async (browser policy).
+            var audioUnlocked = false;
+            function unlockAudioForDescribe() {
+                if (audioUnlocked) return;
+                try {
+                    var Ctx = window.AudioContext || window.webkitAudioContext;
+                    if (Ctx) {
+                        var ctx = new Ctx();
+                        if (ctx.resume) ctx.resume();
+                        // Play a short silent buffer so the page is allowed to play audio later (required on many browsers).
+                        try {
+                            var buf = ctx.createBuffer(1, 1, 22050);
+                            var src = ctx.createBufferSource();
+                            src.buffer = buf;
+                            src.connect(ctx.destination);
+                            src.start(0);
+                        } catch (e2) { /* ignore */ }
+                        audioUnlocked = true;
+                        console.log("[describe] audio unlocked for speech");
+                    }
+                } catch (e) {
+                    console.warn("[describe] audio unlock failed:", e);
+                }
+            }
+
+            function setDescribeStatus(msg, isError) {
+                if (!describeStatus) return;
+                describeStatus.textContent = msg || "";
+                describeStatus.className = "describe-status" + (isError ? " describe-status--error" : "");
+            }
+
+            function showReadAloudButton(description) {
+                var readAloudBtn = document.getElementById("read-aloud-btn");
+                if (!readAloudBtn) return;
+                readAloudBtn.style.display = "";
+                readAloudBtn.disabled = false;
+                readAloudBtn.onclick = function () {
+                    readAloudBtn.disabled = true;
+                    speakDescription(description);
+                    readAloudBtn.disabled = false;
+                };
+            }
+
+            function hideReadAloudButton() {
+                var readAloudBtn = document.getElementById("read-aloud-btn");
+                if (readAloudBtn) { readAloudBtn.style.display = "none"; readAloudBtn.onclick = null; }
+            }
+
+            function speakDescription(text) {
+                if (!text || !("speechSynthesis" in window)) {
+                    console.warn("[describe] speakDescription skipped: no text or no speechSynthesis");
+                    return;
+                }
+                window.speechSynthesis.cancel();
+                if (typeof window.speechSynthesis.resume === "function") {
+                    window.speechSynthesis.resume();
+                }
+                var utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+                var voices = window.speechSynthesis.getVoices();
+                if (voices.length > 0) {
+                    var en = voices.filter(function (v) { return v.lang && v.lang.startsWith("en"); });
+                    utterance.voice = (en.length > 0 ? en[0] : voices[0]);
+                }
+                utterance.onstart = function () { console.log("[describe] speech started"); };
+                utterance.onend = function () { console.log("[describe] speech ended"); };
+                utterance.onerror = function (e) { console.error("[describe] speech error:", e.error, e); };
+                window.speechSynthesis.speak(utterance);
+                console.log("[describe] speak() called, text length:", text.length);
+            }
+
+            if (describeBtn && describeApi) {
+                describeBtn.addEventListener("click", function () {
+                    unlockAudioForDescribe();
+
+                    var graphDiv = document.getElementById("graph");
+                    var equation = graphState.getFunctionLabel ? graphState.getFunctionLabel() : (currentMainExpr || exprInput.value.trim() || "y = " + exprInput.value);
+                    if (!equation) {
+                        setDescribeStatus("Enter a function first.", true);
+                        hideReadAloudButton();
+                        return;
+                    }
+                    if (typeof Plotly === "undefined" || !graphDiv) {
+                        setDescribeStatus("Graph not ready.", true);
+                        hideReadAloudButton();
+                        return;
+                    }
+
+                    // Prime Speech Synthesis in this user gesture so async speak() works later (browser policy).
+                    speakDescription("Generating description.");
+
+                    setDescribeStatus("Generating description…");
+                    describeBtn.disabled = true;
+                    hideReadAloudButton();
+                    Plotly.toImage(graphDiv, { format: "png", width: 800, height: 500 })
+                        .then(function (imageDataUrl) {
+                            console.log("[describe] graph image captured, length:", imageDataUrl.length);
+                            return describeApi.describeFunction(equation, imageDataUrl);
+                        })
+                        .then(function (description) {
+                            console.log("[describe] received description:", description);
+                            setDescribeStatus("Speaking description. The audio is read from the description that Gemini created.");
+                            speakDescription(description);
+                            showReadAloudButton(description);
+                            describeBtn.disabled = false;
+                        })
+                        .catch(function (err) {
+                            console.error("[describe] error:", err);
+                            setDescribeStatus(err.message || "Describe request failed.", true);
+                            describeBtn.disabled = false;
+                        });
+                });
+            }
 
             if (focusRegion) focusRegion.focus();
         })();

@@ -9,6 +9,9 @@
         if (typeof imageDataUrl === "string" && imageDataUrl.indexOf("base64,") !== -1) {
             base64 = imageDataUrl.replace(/^data:image\/\w+;base64,/, "");
         }
+        if (typeof console !== "undefined" && console.log) {
+            console.log("[describe-api] request equation:", equation, "image length:", base64.length);
+        }
         return fetch("/api/describe", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -18,6 +21,9 @@
                 if (!res.ok) {
                     return res.json().then(function (data) {
                         var msg = data && data.error ? data.error : "Describe request failed";
+                        if (typeof console !== "undefined" && console.error) {
+                            console.error("[describe-api] error response:", res.status, msg);
+                        }
                         throw new Error(msg);
                     }, function () {
                         throw new Error("Describe request failed: " + res.status + " " + res.statusText);
@@ -26,7 +32,12 @@
                 return res.json();
             })
             .then(function (data) {
-                return data.description || "";
+                var desc = data.description || "";
+                if (typeof console !== "undefined" && console.log) {
+                    console.log("[describe-api] response description length:", desc.length);
+                    console.log("[describe-api] description (full):", desc);
+                }
+                return desc;
             });
     }
 

@@ -1,10 +1,13 @@
-import "dotenv/config";
-import express from "express";
-import { GoogleGenAI } from "@google/genai";
+import { config } from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Load .env from server directory so it works whether you run from repo root or server/
+config({ path: path.join(__dirname, ".env") });
+
+import express from "express";
+import { GoogleGenAI } from "@google/genai";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -26,9 +29,9 @@ app.post("/api/describe", async (req, res) => {
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey === "AIzaSyAXGPw_OqFOaZbaST7FC5lfz2Z_AIz6sJA") {
+  if (!apiKey || apiKey === "your_gemini_api_key_here") {
     return res.status(500).json({
-      error: "Server is missing GEMINI_API_KEY. Add it to server/.env",
+      error: "Server is missing GEMINI_API_KEY. Add it to server/.env (see server/.env.example).",
     });
   }
 
@@ -47,6 +50,10 @@ app.post("/api/describe", async (req, res) => {
       },
     ];
 
+    // Debug: log request (equation only; do not log full base64)
+    console.log("[describe] request equation:", equation);
+    console.log("[describe] image base64 length:", imageBase64.length);
+
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents,
@@ -60,12 +67,19 @@ app.post("/api/describe", async (req, res) => {
         .join(" ") ??
       "";
     if (!text) {
+      console.log("[describe] no text in response:", JSON.stringify(response, null, 2));
       return res.status(502).json({ error: "No description returned from API" });
     }
 
-    res.json({ description: text.trim() });
+    const description = text.trim();
+    // Debug: log result
+    console.log("[describe] success – description length:", description.length);
+    console.log("[describe] description (full):", description);
+
+    res.json({ description });
   } catch (err) {
-    console.error("Gemini describe error:", err.message);
+    console.error("[describe] Gemini error:", err.message);
+    console.error("[describe] full error:", err);
     res.status(500).json({
       error: err.message || "Failed to generate description",
     });
