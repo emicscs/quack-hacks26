@@ -377,13 +377,27 @@
         }
 
         // Inflection points: f''(x) = 0, using the equation via derivative2At.
+        // Ignore sign flips when both |d2| values are below tolerance (avoids false inflections on linear).
+        var yRange = 1;
+        if (ys.length) {
+            var yMin = ys[0], yMax = ys[0];
+            for (var r = 1; r < ys.length; r++) {
+                if (typeof ys[r] === "number" && isFinite(ys[r])) {
+                    if (ys[r] < yMin) yMin = ys[r];
+                    if (ys[r] > yMax) yMax = ys[r];
+                }
+            }
+            yRange = Math.abs(yMax - yMin) || 1;
+        }
+        var d2Tolerance = 1e-6 * (yRange + 1);
         var d2Prev = null;
         var xPrev = null;
         for (var k = 0; k < xs.length; k++) {
             var xk = xs[k];
             var d2 = derivative2At(xk);
             if (typeof d2 !== "number" || !isFinite(d2)) continue;
-            if (d2Prev !== null && xPrev !== null && hasSignFlip(d2Prev, d2)) {
+            if (d2Prev !== null && xPrev !== null && hasSignFlip(d2Prev, d2) &&
+                Math.abs(d2Prev) > d2Tolerance && Math.abs(d2) > d2Tolerance) {
                 var xRefined = refineInflectionPoint(xPrev, xk, d2Prev, d2);
                 var yRefined = getYAt(xRefined);
                 if (typeof yRefined === "number" && isFinite(yRefined)) {

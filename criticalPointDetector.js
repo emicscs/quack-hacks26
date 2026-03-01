@@ -1,110 +1,129 @@
 /**
  * criticalPointDetector.js
- * Standalone, self-contained module. No dependencies.
- * Detects local minima, maxima, and inflection points on a curve (x[], y[]),
- * visually marks them, and plays distinct Web Audio beeps per type.
+ * Standalone module (no dependencies). Detects local minima, maxima, and
+ * inflection points on (x[], y[]), marks them on Plotly, and plays Web Audio tones.
  *
- * Drop-in: inject script, then:
- *   CriticalPointDetector.attach("#your-graph");
- * With Plotly, data is read from the first trace automatically.
+ * Usage:
+ *   CriticalPointDetector.attach("#graph");
+ *   // or with options:
+ *   CriticalPointDetector.attach("#graph", { getData: function() { return { x: [...], y: [...] }; } });
  *
- * Options (all optional):
- *   getData()     – return { x: number[], y: number[] }; default: read from Plotly if present
- *   markPoints    – false to skip visual marks (default true)
- *   playTones     – false to skip beeps (default true)
- *   clearMarks    – false to keep previous marks (default true)
- *   onDetect(points) – callback with { minima, maxima, inflection }
- *   onMarkPoints(points, container) – custom drawing when not using Plotly
- *   markerSize, beepDuration, beepGap, freqMin, freqMax, freqInflection – tune appearance/sound
+ * Options: getData, markPoints, playTones, clearMarks, onDetect, onMarkPoints,
+ *   markerSize, beepDuration, beepGap, freqMin, freqMax, freqInflection,
+ *   initialCursorX, getCursorX, xTolerance.
  */
 (function (global) {
     "use strict";
 
     var AudioContext = global.AudioContext || global.webkitAudioContext;
 
+    function isFiniteNumber(v) {
+        return typeof v === "number" && Number.isFinite(v);
+    }
+
     /**
-     * Refine a candidate min/max at index i by fitting a parabola through
-     * (x[i-1],y[i-1]), (x[i],y[i]), (x[i+1],y[i+1]) and returning the vertex.
-     * Returns null if refinement is invalid (e.g. linear segment).
+     * Build clean { x, y } arrays from raw trace arrays, dropping non-finite and nulls.
+     */
+    function toFinitePairs(rawX, rawY) {
+        if (!Array.isArray(rawX) || !Array.isArray(rawY) || rawX.length !== rawY.length) {
+            return null;
+        }
+        var x = [];
+        var y = [];
+        for (var i = 0; i < rawX.length; i++) {
+            var xi = rawX[i];
+            var yi = rawY[i];
+            if (xi != null && yi != null && isFiniteNumber(xi) && isFiniteNumber(yi)) {
+                x.push(xi);
+                y.push(yi);
+            }
+        }
+        return x.length >= 3 ? { x: x, y: y } : null;
+    }
+
+    /**
+     * Refine a local min/max at index i using a parabola through (i-1, i, i+1).
+     * Returns vertex { x, y } or null if invalid. Uses correct 2ax+b = slope form.
      */
     function refineExtremum(x, y, i, isMin) {
         var x0 = x[i - 1], x1 = x[i], x2 = x[i + 1];
         var y0 = y[i - 1], y1 = y[i], y2 = y[i + 1];
         var d0 = (y1 - y0) / (x1 - x0);
         var d1 = (y2 - y1) / (x2 - x1);
-        var denom = x2 - x0;
-        if (denom === 0) return null;
+        var denom = 2 * (x1 - x0);
+        if (denom === 0 || !Number.isFinite(d0) || !Number.isFinite(d1)) return null;
         var a = (d1 - d0) / denom;
-        var b = d0 - a * (x1 + x0);
         if (a === 0) return null;
-        if (isMin && a < 0) return null;
-        if (!isMin && a > 0) return null;
+        if (isMin && a <= 0) return null;
+        if (!isMin && a >= 0) return null;
+        var b = d0 - 2 * a * x0;
         var xv = -b / (2 * a);
         xv = Math.max(x0, Math.min(x2, xv));
         var c = y0 - a * x0 * x0 - b * x0;
         var yv = a * xv * xv + b * xv + c;
+        if (!isFiniteNumber(xv) || !isFiniteNumber(yv)) return null;
         return { x: xv, y: yv };
     }
 
     /**
-     * Refine an inflection candidate at j (second-derivative sign change).
-     * Use second-difference values at j-1, j, j+1 and linear zero-crossing for x.
+     * Refine inflection at j where second-difference changes sign (linear zero-crossing).
      */
     function refineInflection(x, y, j) {
         if (j < 2 || j >= x.length - 2) return { x: x[j], y: y[j] };
-        var d2Left = y[j] - 2 * y[j - 1] + y[j - 2];
-        var d2Right = y[j + 2] - 2 * y[j + 1] + y[j];
-        var denom = d2Right - d2Left;
-        if (denom === 0) return { x: x[j], y: y[j] };
-        var xLeft = x[j - 1], xRight = x[j + 1];
-        var t = -d2Left / denom;
+        var d2L = y[j] - 2 * y[j - 1] + y[j - 2];
+        var d2R = y[j + 2] - 2 * y[j + 1] + y[j];
+        var denom = d2R - d2L;
+        if (denom === 0 || !Number.isFinite(d2L) || !Number.isFinite(d2R)) {
+            return { x: x[j], y: y[j] };
+        }
+        var t = -d2L / denom;
         t = Math.max(0, Math.min(1, t));
-        var xInf = xLeft + t * (xRight - xLeft);
-        var yInf = y[j - 1] + (y[j + 1] - y[j - 1]) * ((xInf - x[j - 1]) / (x[j + 1] - x[j - 1] || 1));
-        return { x: xInf, y: typeof yInf === "number" && isFinite(yInf) ? yInf : y[j] };
+        var xL = x[j - 1], xR = x[j + 1];
+        var xInf = xL + t * (xR - xL);
+        var dx = xR - xL || 1;
+        var yInf = y[j - 1] + (y[j + 1] - y[j - 1]) * ((xInf - xL) / dx);
+        return { x: xInf, y: isFiniteNumber(yInf) ? yInf : y[j] };
     }
 
+    /**
+     * Find critical points from sampled curve (x[], y[]). Returns
+     * { minima: [{x,y}, ...], maxima: [...], inflection: [...] }.
+     */
     function findCriticalPoints(x, y) {
-        if (!x || !y || x.length !== y.length || x.length < 3) {
-            return { minima: [], maxima: [], inflection: [] };
-        }
+        var out = { minima: [], maxima: [], inflection: [] };
+        var data = toFinitePairs(x, y);
+        if (!data) return out;
+        x = data.x;
+        y = data.y;
         var n = x.length;
-        var minima = [];
-        var maxima = [];
-        var inflection = [];
-
-        function isFiniteNum(v) {
-            return typeof v === "number" && isFinite(v);
-        }
+        if (n < 3) return out;
 
         for (var i = 1; i < n - 1; i++) {
-            var yi = y[i];
-            var y0 = y[i - 1];
-            var y1 = y[i + 1];
-            if (!isFiniteNum(yi) || !isFiniteNum(y0) || !isFiniteNum(y1)) continue;
+            var yi = y[i], yL = y[i - 1], yR = y[i + 1];
+            if (!isFiniteNumber(yi) || !isFiniteNumber(yL) || !isFiniteNumber(yR)) continue;
 
-            if (yi <= y0 && yi <= y1 && (yi < y0 || yi < y1)) {
+            if (yi <= yL && yi <= yR && (yi < yL || yi < yR)) {
                 var refined = refineExtremum(x, y, i, true);
-                minima.push(refined || { x: x[i], y: yi });
+                out.minima.push(refined || { x: x[i], y: yi });
             }
-            if (yi >= y0 && yi >= y1 && (yi > y0 || yi > y1)) {
+            if (yi >= yL && yi >= yR && (yi > yL || yi > yR)) {
                 var refined = refineExtremum(x, y, i, false);
-                maxima.push(refined || { x: x[i], y: yi });
+                out.maxima.push(refined || { x: x[i], y: yi });
             }
         }
 
         var d2Prev = null;
+        var yRange = n >= 2 ? Math.abs((Math.max.apply(null, y) - Math.min.apply(null, y))) || 1 : 1;
+        var d2Tolerance = 1e-10 * (yRange + 1);
         for (var j = 1; j < n - 1; j++) {
             var d2 = y[j + 1] - 2 * y[j] + y[j - 1];
-            if (!isFiniteNum(d2)) continue;
-            if (d2Prev !== null && d2Prev * d2 < 0) {
-                var refined = refineInflection(x, y, j);
-                inflection.push(refined);
+            if (!isFiniteNumber(d2)) continue;
+            if (d2Prev !== null && d2Prev * d2 < 0 && Math.abs(d2Prev) > d2Tolerance && Math.abs(d2) > d2Tolerance) {
+                out.inflection.push(refineInflection(x, y, j));
             }
             d2Prev = d2;
         }
-
-        return { minima: minima, maxima: maxima, inflection: inflection };
+        return out;
     }
 
     function playTones(points, options) {
@@ -113,15 +132,15 @@
         var ctx = options.audioContext;
         if (!ctx) {
             ctx = new AudioContext();
-            if (options) options.audioContext = ctx;
+            options.audioContext = ctx;
         }
         if (ctx.state === "suspended") ctx.resume();
 
-        var duration = typeof options.beepDuration === "number" ? options.beepDuration : 0.12;
-        var gap = typeof options.beepGap === "number" ? options.beepGap : 0.08;
-        var freqMin = typeof options.freqMin === "number" ? options.freqMin : 280;
-        var freqMax = typeof options.freqMax === "number" ? options.freqMax : 520;
-        var freqInflection = typeof options.freqInflection === "number" ? options.freqInflection : 740;
+        var duration = Number.isFinite(options.beepDuration) ? options.beepDuration : 0.12;
+        var gap = Number.isFinite(options.beepGap) ? options.beepGap : 0.08;
+        var freqMin = Number.isFinite(options.freqMin) ? options.freqMin : 280;
+        var freqMax = Number.isFinite(options.freqMax) ? options.freqMax : 520;
+        var freqInf = Number.isFinite(options.freqInflection) ? options.freqInflection : 740;
 
         function beep(freq, when) {
             var osc = ctx.createOscillator();
@@ -137,26 +156,12 @@
         }
 
         var t = ctx.currentTime;
-        points.minima.forEach(function () {
-            beep(freqMin, t);
-            t += duration + gap;
-        });
-        points.maxima.forEach(function () {
-            beep(freqMax, t);
-            t += duration + gap;
-        });
-        points.inflection.forEach(function () {
-            beep(freqInflection, t);
-            t += duration + gap;
-        });
+        points.minima.forEach(function () { beep(freqMin, t); t += duration + gap; });
+        points.maxima.forEach(function () { beep(freqMax, t); t += duration + gap; });
+        points.inflection.forEach(function () { beep(freqInf, t); t += duration + gap; });
     }
 
-    var crossingState = {
-        lastCursorX: null,
-        points: null,
-        audioContext: null,
-        xTolerance: 0.06
-    };
+    var crossingState = { lastCursorX: null, points: null, audioContext: null, xTolerance: 0.06 };
 
     function playCrossingSound(type, options) {
         if (!AudioContext) return;
@@ -168,12 +173,12 @@
         }
         if (ctx.state === "suspended") ctx.resume();
 
-        var duration = typeof options.crossingDuration === "number" ? options.crossingDuration : 0.28;
-        var gain = typeof options.crossingGain === "number" ? options.crossingGain : 0.4;
-        var freqMin = typeof options.freqMin === "number" ? options.freqMin : 280;
-        var freqMax = typeof options.freqMax === "number" ? options.freqMax : 520;
-        var freqInflection = typeof options.freqInflection === "number" ? options.freqInflection : 740;
-        var freq = type === "min" ? freqMin : type === "max" ? freqMax : freqInflection;
+        var duration = Number.isFinite(options.crossingDuration) ? options.crossingDuration : 0.28;
+        var gain = Number.isFinite(options.crossingGain) ? options.crossingGain : 0.4;
+        var freqMin = Number.isFinite(options.freqMin) ? options.freqMin : 280;
+        var freqMax = Number.isFinite(options.freqMax) ? options.freqMax : 520;
+        var freqInf = Number.isFinite(options.freqInflection) ? options.freqInflection : 740;
+        var freq = type === "min" ? freqMin : type === "max" ? freqMax : freqInf;
 
         var when = ctx.currentTime;
         var osc = ctx.createOscillator();
@@ -204,8 +209,7 @@
         var pts = crossingState.points;
         if (!pts) return;
         var prev = crossingState.lastCursorX;
-        var tol = typeof options.xTolerance === "number" ? options.xTolerance : crossingState.xTolerance;
-
+        var tol = Number.isFinite(options.xTolerance) ? options.xTolerance : crossingState.xTolerance;
         if (prev !== null) {
             pts.minima.forEach(function (p) {
                 if (crossed(prev, x, p.x, tol)) playCrossingSound("min", options);
@@ -222,37 +226,28 @@
 
     function setCrossingPoints(points, initialCursorX) {
         crossingState.points = points;
-        crossingState.lastCursorX = typeof initialCursorX === "number" ? initialCursorX : null;
+        crossingState.lastCursorX = isFiniteNumber(initialCursorX) ? initialCursorX : null;
     }
 
+    /**
+     * Read first trace's x,y from a Plotly graph div. Plotly attaches .data to the div.
+     */
     function getDataFromPlotly(container) {
         var el = typeof container === "string" ? document.querySelector(container) : container;
-        if (!el || !el.data || !el.data[0]) return null;
+        if (!el || !el.data || !Array.isArray(el.data) || el.data.length === 0) return null;
         var trace = el.data[0];
-        var rawX = trace.x;
-        var rawY = trace.y;
-        if (!rawX || !rawY || rawX.length !== rawY.length) return null;
-        var x = [];
-        var y = [];
-        for (var i = 0; i < rawX.length; i++) {
-            var xi = rawX[i];
-            var yi = rawY[i];
-            if (typeof xi === "number" && isFinite(xi) && typeof yi === "number" && isFinite(yi)) {
-                x.push(xi);
-                y.push(yi);
-            }
-        }
-        if (x.length < 3) return null;
-        return { x: x, y: y };
+        var rawX = trace && trace.x;
+        var rawY = trace && trace.y;
+        return toFinitePairs(rawX, rawY);
     }
 
     function addPlotlyMarks(container, points, options) {
         var Plotly = global.Plotly;
         if (!Plotly) return false;
         var el = typeof container === "string" ? document.querySelector(container) : container;
-        if (!el || !el.data) return false;
+        if (!el || !Array.isArray(el.data)) return false;
 
-        var markerSize = typeof options.markerSize === "number" ? options.markerSize : 12;
+        var size = Number.isFinite(options.markerSize) ? options.markerSize : 12;
         var traces = [];
 
         if (points.minima.length) {
@@ -261,7 +256,7 @@
                 y: points.minima.map(function (p) { return p.y; }),
                 mode: "markers",
                 type: "scatter",
-                marker: { size: markerSize, color: "#2ecc71", symbol: "triangle-down", line: { color: "#1a1a1a", width: 1 } },
+                marker: { size: size, color: "#2ecc71", symbol: "triangle-down", line: { color: "#1a1a1a", width: 1 } },
                 name: "Local min"
             });
         }
@@ -271,7 +266,7 @@
                 y: points.maxima.map(function (p) { return p.y; }),
                 mode: "markers",
                 type: "scatter",
-                marker: { size: markerSize, color: "#e74c3c", symbol: "triangle-up", line: { color: "#1a1a1a", width: 1 } },
+                marker: { size: size, color: "#e74c3c", symbol: "triangle-up", line: { color: "#1a1a1a", width: 1 } },
                 name: "Local max"
             });
         }
@@ -281,26 +276,26 @@
                 y: points.inflection.map(function (p) { return p.y; }),
                 mode: "markers",
                 type: "scatter",
-                marker: { size: markerSize, color: "#3498db", symbol: "diamond", line: { color: "#1a1a1a", width: 1 } },
+                marker: { size: size, color: "#3498db", symbol: "diamond", line: { color: "#1a1a1a", width: 1 } },
                 name: "Inflection"
             });
         }
-
         if (traces.length) Plotly.addTraces(el, traces);
-        return true;
+        return traces.length > 0;
     }
 
     function removePlotlyMarks(container) {
         var Plotly = global.Plotly;
         if (!Plotly) return;
         var el = typeof container === "string" ? document.querySelector(container) : container;
-        if (!el || !el.data || el.data.length <= 1) return;
+        if (!el || !Array.isArray(el.data) || el.data.length <= 1) return;
         var indices = [];
         for (var i = el.data.length - 1; i >= 1; i--) {
             var name = el.data[i].name;
             if (name === "Local min" || name === "Local max" || name === "Inflection") indices.push(i);
         }
-        if (indices.length) Plotly.deleteTraces(el, indices.sort(function (a, b) { return b - a; }));
+        indices.sort(function (a, b) { return b - a; });
+        if (indices.length) Plotly.deleteTraces(el, indices);
     }
 
     function attach(containerSelectorOrElement, options) {
@@ -311,10 +306,10 @@
         if (!container) return null;
 
         var getData = options.getData;
-        if (!getData && typeof Plotly !== "undefined") {
+        if (!getData && typeof global.Plotly !== "undefined") {
             getData = function () { return getDataFromPlotly(container); };
         }
-        if (!getData) return null;
+        if (typeof getData !== "function") return null;
 
         var data = getData();
         if (!data || !data.x || !data.y) return null;
@@ -332,17 +327,16 @@
         }
 
         if (options.markPoints !== false) {
-            if (!addPlotlyMarks(container, points, options) && options.onMarkPoints) {
+            if (!addPlotlyMarks(container, points, options) && typeof options.onMarkPoints === "function") {
                 options.onMarkPoints(points, container);
             }
         }
 
         if (options.playTones !== false) playTones(points, options);
-
-        if (options.onDetect) options.onDetect(points);
+        if (typeof options.onDetect === "function") options.onDetect(points);
 
         var initialX = options.initialCursorX;
-        if (initialX === undefined && options.getCursorX && typeof options.getCursorX === "function") {
+        if (initialX === undefined && typeof options.getCursorX === "function") {
             initialX = options.getCursorX();
         }
         setCrossingPoints(points, initialX);
@@ -363,26 +357,23 @@
             if (!enabled || !graphSelector) return;
             setTimeout(function () {
                 var attachOptions = {};
-                if (options.getData && typeof options.getData === "function") {
-                    attachOptions.getData = options.getData;
-                }
-                if (getCursorX && typeof getCursorX === "function") {
-                    attachOptions.getCursorX = getCursorX;
-                }
+                if (typeof options.getData === "function") attachOptions.getData = options.getData;
+                if (typeof getCursorX === "function") attachOptions.getCursorX = getCursorX;
                 attach(graphSelector, attachOptions);
             }, attachDelayMs);
         }
 
         function cursorHandler(x, y, isValid) {
             if (enabled) updateCursor(x, options);
-            if (onCursorChange && typeof onCursorChange === "function") {
-                onCursorChange(x, y, isValid);
-            }
+            if (typeof onCursorChange === "function") onCursorChange(x, y, isValid);
         }
 
         function disable() {
             enabled = false;
-            if (graphSelector) removePlotlyMarks(typeof graphSelector === "string" ? document.querySelector(graphSelector) : graphSelector);
+            if (graphSelector) {
+                var el = typeof graphSelector === "string" ? document.querySelector(graphSelector) : graphSelector;
+                if (el) removePlotlyMarks(el);
+            }
         }
 
         function enable() {
@@ -390,7 +381,13 @@
             run();
         }
 
-        return { run: run, cursorHandler: cursorHandler, enable: enable, disable: disable, get enabled() { return enabled; } };
+        return {
+            run: run,
+            cursorHandler: cursorHandler,
+            enable: enable,
+            disable: disable,
+            get enabled() { return enabled; }
+        };
     }
 
     var CriticalPointDetector = {
