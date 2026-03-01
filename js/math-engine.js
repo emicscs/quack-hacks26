@@ -8,16 +8,71 @@
 
     var RESERVED = { x: true, pi: true, e: true, i: true };
 
+    function lastNonSpaceChar(str) {
+        for (var i = str.length - 1; i >= 0; i--) {
+            if (str[i] !== " ") return str[i];
+        }
+        return "";
+    }
+
+    function isAbsOpeningContext(prevCh) {
+        if (!prevCh) return true;
+        return /[\(\[\{,\+\-\*\/\^=<>]/.test(prevCh);
+    }
+
+    function normalizeAbsoluteBars(str) {
+        var out = "";
+        var absDepth = 0;
+        for (var i = 0; i < str.length; i++) {
+            var ch = str[i];
+            if (ch !== "|") {
+                out += ch;
+                continue;
+            }
+
+            var prevCh = lastNonSpaceChar(out);
+            if (absDepth > 0 && !isAbsOpeningContext(prevCh)) {
+                out += ")";
+                absDepth--;
+            } else {
+                out += "abs(";
+                absDepth++;
+            }
+        }
+        while (absDepth > 0) {
+            out += ")";
+            absDepth--;
+        }
+        return out;
+    }
+
+    function applyCommonInputConversions(str) {
+        var s = str;
+        // Common keyboard / pasted math symbols.
+        s = s.replace(/\u00D7/g, "*"); // multiplication sign
+        s = s.replace(/\u00F7/g, "/"); // division sign
+        s = s.replace(/\u2212/g, "-"); // unicode minus
+        s = s.replace(/\u03C0/g, "pi"); // pi symbol
+
+        // sqrt shorthand: √x -> sqrt(x), √(x+1) -> sqrt(x+1)
+        s = s.replace(/\u221A\s*\(([^\)]*)\)/g, "sqrt($1)");
+        s = s.replace(/\u221A\s*([A-Za-z0-9_.]+)/g, "sqrt($1)");
+
+        // Absolute value shorthand: |expr| -> abs(expr)
+        s = normalizeAbsoluteBars(s);
+        return s;
+    }
+
     function normalizeExpressionInput(str) {
         if (typeof str !== "string") return "";
         var s = str.trim().replace(/\s+/g, " ");
-        s = s.replace(/\u03C0/g, "pi");
         var eq = s.indexOf("=");
         if (eq !== -1) {
             var left = s.slice(0, eq).trim().toLowerCase();
             var right = s.slice(eq + 1).trim();
-            if (/^(y|f\s*\(\s*x\s*\))$/.test(left)) return right;
+            if (/^(y|f\s*\(\s*x\s*\))$/.test(left)) s = right;
         }
+        s = applyCommonInputConversions(s);
         return s;
     }
 
@@ -46,8 +101,9 @@
         var parsed = parse(expr);
         if (!parsed || !parsed.node) return [];
         var names = [];
-        parsed.node.traverse(function (node) {
-            if (node.type === "SymbolNode" && !RESERVED[node.name]) {
+        parsed.node.traverse(function (node, path, parent) {
+            var isFunctionName = parent && parent.type === "FunctionNode" && parent.fn === node;
+            if (node.type === "SymbolNode" && !isFunctionName && !RESERVED[node.name]) {
                 if (names.indexOf(node.name) === -1) names.push(node.name);
             }
         });

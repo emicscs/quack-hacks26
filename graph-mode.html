@@ -25,7 +25,6 @@
             <a href="index.html" class="graph-mode-back" aria-label="Back to Audible Math home">← Back</a>
         </header>
 
-        <p class="instructions graph-mode-instructions">Adjust along the graph with <kbd>←</kbd>/<kbd>→</kbd> keys.</p>
         <div class="graph-mode-main-row">
             <div class="graph-mode-controls-column">
                 <section aria-label="Expression entry" class="expression-entry graph-mode-card">
@@ -49,17 +48,6 @@
                     <span id="catalog-desc" class="visually-hidden">Choose a function to graph and sonify.</span>
                 </section>
 
-                <section aria-label="Describe function with Gemini" class="expression-list-section graph-mode-card">
-                    <div class="expression-list-header">
-                        <span>Describe Function (Gemini)</span>
-                    </div>
-                    <p class="describe-function-note">Generate a mathematical description of your function and graph (type, bounds, asymptotes). <strong>The audio you hear is read from the description that Gemini creates.</strong></p>
-                    <button type="button" id="describe-function-btn" class="describe-function-btn" aria-describedby="describe-function-desc">Describe function</button>
-                    <span id="describe-function-desc" class="visually-hidden">Request an AI-generated spoken description of the current function and graph; the description is then read aloud.</span>
-                    <p id="describe-status" class="describe-status" aria-live="polite" aria-atomic="true"></p>
-                    <button type="button" id="read-aloud-btn" class="describe-function-btn read-aloud-btn" style="display:none; margin-top:0.5rem;" aria-label="Read description aloud">Read aloud</button>
-                </section>
-
                 <section aria-label="Navigation settings" class="graph-mode-card">
                     <h2 class="graph-mode-card__title">Navigation &amp; Sound</h2>
                     <div class="graph-mode-settings">
@@ -80,6 +68,15 @@
                 </section>
             </div>
             <div class="graph-mode-graph-wrap">
+                <div class="graph-mode-graph-topbar">
+                    <p class="instructions graph-mode-instructions">Adjust along the graph with <kbd>←</kbd>/<kbd>→</kbd> keys.</p>
+                    <div class="graph-mode-graph-actions">
+                        <div class="describe-graph-wrap">
+                            <button type="button" id="describe-function-btn" class="describe-graph-btn" aria-describedby="describe-graph-tip">describe graph</button>
+                            <div id="describe-graph-tip" class="describe-graph-tip" role="tooltip">Generate a mathematical description of your function and graph (type, bounds, asymptotes). The audio you hear is read from the description that Gemini creates.</div>
+                        </div>
+                    </div>
+                </div>
                 <div id="graph" role="img" aria-label="Graph of function"></div>
                 <section aria-live="polite" aria-atomic="true" id="live-region" class="live-region">
                     Current: x = <span id="current-x">0</span>, y = <span id="current-y">0</span>

@@ -644,7 +644,7 @@
             showlegend: true,
             uirevision: "graph-mode"
         };
-        var config = { responsive: true, scrollZoom: false };
+        var config = { responsive: true, scrollZoom: false, displayModeBar: false };
 
         if (options.preserveCursor === true) {
             currentX = clampToTrueDomain(currentX);

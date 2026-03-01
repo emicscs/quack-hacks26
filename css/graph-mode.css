@@ -51,6 +51,94 @@
   margin-bottom: 0.9rem;
 }
 
+.graph-mode-page .describe-graph-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.04rem;
+}
+
+.graph-mode-page .describe-graph-btn {
+  padding: 0.4rem 1rem;
+  font-size: 0.76rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.14rem;
+  font-family: var(--graph-font-body);
+  font-weight: 600;
+  text-transform: lowercase;
+  border-radius: 9999px;
+  cursor: pointer;
+  border: 1px solid var(--graph-accent);
+  background: var(--graph-accent-dim);
+  color: var(--graph-accent);
+  transition: background 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+
+.graph-mode-page .describe-graph-btn:hover:not(:disabled),
+.graph-mode-page .describe-graph-btn:focus-visible {
+  background: rgba(232, 168, 74, 0.25);
+  box-shadow: 0 4px 16px var(--graph-accent-dim);
+  transform: translateY(0);
+  outline: none;
+}
+
+.graph-mode-page .describe-graph-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.graph-mode-page .describe-graph-tip {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  width: min(360px, 72vw);
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--graph-border);
+  background: rgba(15, 15, 15, 0.96);
+  color: var(--graph-fg-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
+  z-index: 15;
+}
+
+.graph-mode-page .describe-graph-wrap:hover .describe-graph-tip,
+.graph-mode-page .describe-graph-wrap:focus-within .describe-graph-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.graph-mode-graph-topbar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.85rem;
+  padding: 0.38rem 0.68rem 0.12rem 0.68rem;
+  background: inherit;
+}
+
+.graph-mode-graph-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding-right: 0;
+}
+
+.graph-mode-graph-actions .describe-graph-tip {
+  right: 0;
+}
+
 .graph-mode-header h1 {
   font-family: var(--graph-font-title);
   font-size: clamp(1.75rem, 5vw, 2.25rem);
@@ -182,6 +270,7 @@
   font-family: var(--graph-font-title);
   font-size: 1rem;
   font-weight: 700;
+  line-height: 1.5;
   letter-spacing: -0.02em;
   margin: 0 0 0.5rem;
   color: var(--graph-fg);
@@ -349,9 +438,16 @@
 
 /* Instructions above graph */
 .graph-mode-instructions {
-  font-size: 0.9rem;
+  font-size: 0.78rem;
+  line-height: 1.05;
   color: var(--graph-fg-muted);
-  margin: 0 0 0.45rem;
+  margin: 0;
+}
+
+.graph-mode-graph-wrap .graph-mode-instructions {
+  margin: 0;
+  padding: 0.04rem 0.08rem;
+  background: inherit;
 }
 
 .graph-mode-page .graph-mode-instructions kbd {
@@ -366,7 +462,8 @@
 
 /* Graph container card */
 .graph-mode-graph-wrap {
-  background: rgba(13, 15, 20, 0.6);
+  --graph-panel-bg: #0d0f14;
+  background: var(--graph-panel-bg);
   border: 1px solid var(--graph-border);
   border-radius: 1rem;
   overflow: hidden;
@@ -379,6 +476,8 @@
   width: 100%;
   min-height: 300px;
   display: block;
+  background: var(--graph-panel-bg);
+  margin-top: 0;
 }
 
 .graph-mode-graph-wrap .live-region {
@@ -522,48 +621,6 @@
 .graph-mode-page .sound-btn__icon {
   font-size: 1rem;
   line-height: 1;
-}
-
-/* Describe function (Gemini + TTS) */
-.graph-mode-page .describe-function-note {
-  font-size: 0.9rem;
-  color: var(--graph-fg-muted);
-  margin: 0 0 1rem;
-  line-height: 1.5;
-}
-
-.graph-mode-page .describe-function-btn {
-  padding: 0.6rem 1.25rem;
-  font-size: 0.95rem;
-  font-family: var(--graph-font-body);
-  font-weight: 600;
-  border-radius: 9999px;
-  cursor: pointer;
-  border: 1px solid var(--graph-accent);
-  background: var(--graph-accent-dim);
-  color: var(--graph-accent);
-  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
-}
-
-.graph-mode-page .describe-function-btn:hover:not(:disabled) {
-  background: rgba(232, 168, 74, 0.25);
-  box-shadow: 0 4px 16px var(--graph-accent-dim);
-  transform: translateY(-1px);
-}
-
-.graph-mode-page .describe-function-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.graph-mode-page .describe-status {
-  margin-top: 0.75rem;
-  font-size: 0.85rem;
-  color: var(--graph-fg-muted);
-}
-
-.graph-mode-page .describe-status--error {
-  color: #f08a7a;
 }
 
 /* Bottom instructions */
